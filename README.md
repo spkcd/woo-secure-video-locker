@@ -116,9 +116,9 @@ Contributions are welcome! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for det
 
 For support, please:
 
-1. Check the [documentation](https://yourwebsite.com/woo-secure-video-locker-docs)
+1. Check the [documentation](https://krischislett.com/woo-secure-video-locker-docs)
 2. Visit the [support forum](https://wordpress.org/support/plugin/woo-secure-video-locker/)
-3. For premium support, contact us at support@yourwebsite.com
+3. For premium support, contact us at valentin@krischislett.com
 
 ## 🔗 Related
 
