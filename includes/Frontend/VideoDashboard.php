@@ -70,7 +70,7 @@ class VideoDashboard {
                             oncontextmenu="return false;"
                         >
                             <source src="<?php echo esc_url($video_url . '&chunk=0'); ?>" type="video/mp4">
-                            <?php _e('Your browser does not support the video tag.', 'woo-secure-video-locker'); ?>
+                            <?php esc_html_e('Your browser does not support the video tag.', 'woo-secure-video-locker'); ?>
                         </video>
                     </div>
                 </div>
@@ -106,7 +106,7 @@ class VideoDashboard {
     public function ajax_refresh_video_url() {
         check_ajax_referer('wsvl-video-nonce', 'nonce');
 
-        $video_slug = sanitize_text_field($_POST['video_slug'] ?? '');
+        $video_slug = sanitize_text_field(wp_unslash($_POST['video_slug'] ?? ''));
         if (!$video_slug) {
             wp_send_json_error('Invalid video slug');
         }

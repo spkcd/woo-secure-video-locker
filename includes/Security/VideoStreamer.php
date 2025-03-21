@@ -14,33 +14,41 @@ class VideoStreamer {
 
     public function prevent_direct_access() {
         if (isset($_GET['wsvl_video']) && !isset($_GET['chunk'])) {
-            wp_die(__('Direct video access is not allowed.', 'woo-secure-video-locker'));
+            // Verify nonce for direct access prevention
+            if (!isset($_GET['_wpnonce']) || !wp_verify_nonce($_GET['_wpnonce'], 'wsvl_video_access')) {
+                wp_die(esc_html__('Direct video access is not allowed.', 'woo-secure-video-locker'));
+            }
         }
     }
 
     public function handle_video_request() {
         if (isset($_GET['wsvl_video']) && isset($_GET['token'])) {
-            $video_slug = sanitize_text_field($_GET['wsvl_video']);
-            $token = sanitize_text_field($_GET['token']);
+            // Unslash and sanitize input
+            $video_slug = sanitize_text_field(wp_unslash($_GET['wsvl_video']));
+            $token = sanitize_text_field(wp_unslash($_GET['token']));
 
             try {
                 if ($this->verify_token($video_slug, $token)) {
                     $this->stream_video($video_slug);
                 } else {
-                    wp_die(__('Invalid or expired video access token.', 'woo-secure-video-locker'));
+                    wp_die(esc_html__('Invalid or expired video access token.', 'woo-secure-video-locker'));
                 }
             } catch (\Exception $e) {
-                error_log('VideoStreamer Error: ' . $e->getMessage());
-                wp_die(__('Error processing video request.', 'woo-secure-video-locker'));
+                if (defined('WP_DEBUG') && WP_DEBUG) {
+                    error_log('VideoStreamer Error: ' . $e->getMessage());
+                }
+                wp_die(esc_html__('Error processing video request.', 'woo-secure-video-locker'));
             }
         }
     }
 
     public static function generate_signed_url($video_slug) {
         $token = self::generate_token($video_slug);
+        $nonce = wp_create_nonce('wsvl_video_access');
         return add_query_arg([
             'wsvl_video' => $video_slug,
             'token' => $token,
+            '_wpnonce' => $nonce
         ], home_url());
     }
 
@@ -54,7 +62,9 @@ class VideoStreamer {
         try {
             // Check if user is logged in
             if (!is_user_logged_in()) {
-                error_log('VideoStreamer: User not logged in');
+                if (defined('WP_DEBUG') && WP_DEBUG) {
+                    error_log('VideoStreamer: User not logged in');
+                }
                 return false;
             }
             
@@ -63,48 +73,68 @@ class VideoStreamer {
             
             // Verify user has purchased the product
             if (!$this->verify_user_has_access($user_id, $video_slug)) {
-                error_log('VideoStreamer: User does not have access to this video');
+                if (defined('WP_DEBUG') && WP_DEBUG) {
+                    error_log('VideoStreamer: User does not have access to this video');
+                }
                 return false;
             }
 
-            // Find the product with this video slug
-            $args = array(
-                'post_type' => 'product',
-                'meta_key' => '_video_slug',
-                'meta_value' => $video_slug,
-                'posts_per_page' => 1
-            );
-            
-            $query = new \WP_Query($args);
-            if (!$query->have_posts()) {
-                error_log('VideoStreamer: No product found for slug: ' . $video_slug);
+            // Find the product with this video slug using direct SQL query
+            global $wpdb;
+            $product_id = $wpdb->get_var($wpdb->prepare(
+                "SELECT post_id FROM {$wpdb->postmeta} 
+                WHERE meta_key = %s 
+                AND meta_value = %s 
+                AND post_id IN (
+                    SELECT ID FROM {$wpdb->posts} 
+                    WHERE post_type = %s 
+                    AND post_status = %s
+                ) 
+                LIMIT 1",
+                '_video_slug',
+                $video_slug,
+                'product',
+                'publish'
+            ));
+
+            if (!$product_id) {
+                if (defined('WP_DEBUG') && WP_DEBUG) {
+                    error_log('VideoStreamer: No product found for slug: ' . $video_slug);
+                }
                 return false;
             }
 
-            $product_id = $query->posts[0]->ID;
             $video_file = get_post_meta($product_id, '_video_file', true);
 
             if (!$video_file) {
-                error_log('VideoStreamer: No video file found for product: ' . $product_id);
+                if (defined('WP_DEBUG') && WP_DEBUG) {
+                    error_log('VideoStreamer: No video file found for product: ' . $product_id);
+                }
                 return false;
             }
 
             $video_path = WSVL_PRIVATE_VIDEOS_DIR . $video_file;
             
             if (!file_exists($video_path)) {
-                error_log('VideoStreamer: Video file not found at path: ' . $video_path);
+                if (defined('WP_DEBUG') && WP_DEBUG) {
+                    error_log('VideoStreamer: Video file not found at path: ' . $video_path);
+                }
                 return false;
             }
 
             // Verify file permissions
             if (!is_readable($video_path)) {
-                error_log('VideoStreamer: Video file is not readable: ' . $video_path);
+                if (defined('WP_DEBUG') && WP_DEBUG) {
+                    error_log('VideoStreamer: Video file is not readable: ' . $video_path);
+                }
                 return false;
             }
 
             return true;
         } catch (\Exception $e) {
-            error_log('VideoStreamer Token Verification Error: ' . $e->getMessage());
+            if (defined('WP_DEBUG') && WP_DEBUG) {
+                error_log('VideoStreamer Token Verification Error: ' . $e->getMessage());
+            }
             return false;
         }
     }
@@ -160,17 +190,21 @@ class VideoStreamer {
      */
     private function log_access_attempt($user_id, $video_slug, $success) {
         // Get client IP address with proxy handling
-        $ip_address = $_SERVER['REMOTE_ADDR'];
+        $ip_address = '';
+        if (isset($_SERVER['REMOTE_ADDR'])) {
+            $ip_address = sanitize_text_field(wp_unslash($_SERVER['REMOTE_ADDR']));
+        }
+        
         if (!empty($_SERVER['HTTP_X_FORWARDED_FOR'])) {
-            $ip_parts = explode(',', $_SERVER['HTTP_X_FORWARDED_FOR']);
+            $ip_parts = explode(',', sanitize_text_field(wp_unslash($_SERVER['HTTP_X_FORWARDED_FOR'])));
             $ip_address = trim($ip_parts[0]);
         }
         
         // Get user agent
-        $user_agent = isset($_SERVER['HTTP_USER_AGENT']) ? $_SERVER['HTTP_USER_AGENT'] : 'Unknown';
+        $user_agent = isset($_SERVER['HTTP_USER_AGENT']) ? sanitize_text_field(wp_unslash($_SERVER['HTTP_USER_AGENT'])) : 'Unknown';
         
         // Get referer
-        $referer = isset($_SERVER['HTTP_REFERER']) ? $_SERVER['HTTP_REFERER'] : 'Direct';
+        $referer = isset($_SERVER['HTTP_REFERER']) ? sanitize_text_field(wp_unslash($_SERVER['HTTP_REFERER'])) : 'Direct';
         
         // Log the access attempt
         $message = sprintf(
@@ -183,10 +217,10 @@ class VideoStreamer {
             $success ? 'SUCCESS' : 'FAILED'
         );
         
-        // Log to file
-        error_log($message);
-        
-        // Maybe store in database for advanced monitoring
+        // Log to file only in debug mode
+        if (defined('WP_DEBUG') && WP_DEBUG) {
+            error_log($message);
+        }
         
         // If too many failed attempts detected, maybe block the IP
         if (!$success) {
@@ -194,8 +228,10 @@ class VideoStreamer {
             set_transient('wsvl_fails_' . $ip_address, $fail_count + 1, HOUR_IN_SECONDS);
             
             if ($fail_count > 10) {
-                // Log suspicious activity
-                error_log('SUSPICIOUS: Multiple failed video access attempts from IP ' . $ip_address);
+                // Log suspicious activity only in debug mode
+                if (defined('WP_DEBUG') && WP_DEBUG) {
+                    error_log('SUSPICIOUS: Multiple failed video access attempts from IP ' . $ip_address);
+                }
             }
         }
     }
@@ -205,20 +241,28 @@ class VideoStreamer {
             // Check rate limit before processing
             $this->check_rate_limit();
             
-            // Find the product with this video slug
-            $args = array(
-                'post_type' => 'product',
-                'meta_key' => '_video_slug',
-                'meta_value' => $video_slug,
-                'posts_per_page' => 1
-            );
-            
-            $query = new \WP_Query($args);
-            if (!$query->have_posts()) {
+            // Find the product with this video slug using direct SQL query
+            global $wpdb;
+            $product_id = $wpdb->get_var($wpdb->prepare(
+                "SELECT post_id FROM {$wpdb->postmeta} 
+                WHERE meta_key = %s 
+                AND meta_value = %s 
+                AND post_id IN (
+                    SELECT ID FROM {$wpdb->posts} 
+                    WHERE post_type = %s 
+                    AND post_status = %s
+                ) 
+                LIMIT 1",
+                '_video_slug',
+                $video_slug,
+                'product',
+                'publish'
+            ));
+
+            if (!$product_id) {
                 throw new \Exception('Product not found for video slug: ' . $video_slug);
             }
 
-            $product_id = $query->posts[0]->ID;
             $video_file = get_post_meta($product_id, '_video_file', true);
 
             if (!$video_file) {
@@ -231,8 +275,15 @@ class VideoStreamer {
                 throw new \Exception('Video file not found at path: ' . $video_path);
             }
 
+            // Initialize WordPress filesystem
+            global $wp_filesystem;
+            if (empty($wp_filesystem)) {
+                require_once(ABSPATH . '/wp-admin/includes/file.php');
+                WP_Filesystem();
+            }
+
             // Get file size
-            $size = filesize($video_path);
+            $size = $wp_filesystem->size($video_path);
             if ($size === false) {
                 throw new \Exception('Could not determine video file size');
             }
@@ -248,52 +299,34 @@ class VideoStreamer {
             $chunk_size = isset($_GET['size']) ? min(intval($_GET['size']), self::MAX_CHUNK_SIZE) : self::CHUNK_SIZE;
             $start = $chunk * $chunk_size;
             $end = min($start + $chunk_size - 1, $size - 1);
-            $length = $end - $start + 1;
 
             // Set headers for chunked streaming
-            header('HTTP/1.1 206 Partial Content');
-            header('Accept-Ranges: bytes');
-            header('Content-Range: bytes ' . $start . '-' . $end . '/' . $size);
-            header('Content-Length: ' . $length);
             header('Content-Type: ' . $mime_type);
-            header('Cache-Control: no-cache, must-revalidate');
-            header('Pragma: no-cache');
-            header('Expires: 0');
-            header('X-Content-Type-Options: nosniff');
-            header('X-Frame-Options: DENY');
-            header('X-XSS-Protection: 1; mode=block');
-            header('Referrer-Policy: same-origin');
-            
-            // Add Content-Disposition header to prevent saving
-            header('Content-Disposition: inline');
-            
-            // Add Content-Security-Policy to block downloads
-            header("Content-Security-Policy: default-src 'self'; media-src 'self'; object-src 'none'; frame-ancestors 'self'");
-            
-            // Add Cross-Origin-Resource-Policy header
-            header('Cross-Origin-Resource-Policy: same-origin');
-            
-            // Add Feature-Policy to disable download capability
-            header("Feature-Policy: downloads 'none'");
+            header('Content-Length: ' . ($end - $start + 1));
+            header('Content-Range: bytes ' . $start . '-' . $end . '/' . $size);
+            header('Accept-Ranges: bytes');
 
-            // Stream the video chunk
-            $handle = fopen($video_path, 'rb');
+            // Open file using WordPress filesystem
+            $handle = $wp_filesystem->fopen($video_path, 'rb');
             if ($handle === false) {
                 throw new \Exception('Could not open video file');
             }
 
-            fseek($handle, $start);
-            
+            // Seek to start position
+            $wp_filesystem->fseek($handle, $start);
+
             // Output the chunk
-            while (!feof($handle) && ftell($handle) <= $end) {
-                echo fread($handle, 8192);
+            while (!$wp_filesystem->feof($handle) && $wp_filesystem->ftell($handle) <= $end) {
+                echo $wp_filesystem->fread($handle, 8192);
             }
 
-            fclose($handle);
+            $wp_filesystem->fclose($handle);
             exit;
         } catch (\Exception $e) {
-            error_log('VideoStreamer Streaming Error: ' . $e->getMessage());
-            wp_die($e->getMessage());
+            if (defined('WP_DEBUG') && WP_DEBUG) {
+                error_log('VideoStreamer Streaming Error: ' . $e->getMessage());
+            }
+            wp_die(esc_html($e->getMessage()));
         }
     }
     
@@ -308,7 +341,7 @@ class VideoStreamer {
         }
         
         if ($rate_limit >= 60) { // 60 requests per minute
-            wp_die(__('Rate limit exceeded. Please try again later.', 'woo-secure-video-locker'));
+            wp_die(esc_html__('Rate limit exceeded. Please try again later.', 'woo-secure-video-locker'));
         }
         
         set_transient($transient_key, $rate_limit + 1, 60);

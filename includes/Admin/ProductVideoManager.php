@@ -82,16 +82,16 @@ class ProductVideoManager {
             ?>
             <div class="options_group">
                 <p class="form-field">
-                    <label for="_video_file"><?php _e('Video File', 'woo-secure-video-locker'); ?></label>
+                    <label for="_video_file"><?php esc_html_e('Video File', 'woo-secure-video-locker'); ?></label>
                     <input type="hidden" id="_video_file" name="_video_file" value="<?php echo esc_attr($video_file); ?>" />
                     <button type="button" class="button wsvl-upload-video" id="wsvl-upload-video">
-                        <?php _e('Upload Video', 'woo-secure-video-locker'); ?>
+                        <?php esc_html_e('Upload Video', 'woo-secure-video-locker'); ?>
                     </button>
                     <span class="wsvl-upload-status"></span>
                     <div class="wsvl-video-preview">
                         <?php if ($video_file) : ?>
                             <p class="description">
-                                <?php _e('Current video:', 'woo-secure-video-locker'); ?> 
+                                <?php esc_html_e('Current video:', 'woo-secure-video-locker'); ?> 
                                 <strong><?php echo esc_html(basename($video_file)); ?></strong>
                             </p>
                         <?php endif; ?>
@@ -103,9 +103,15 @@ class ProductVideoManager {
     }
 
     public function save_video_data($post_id) {
-        $video_slug = sanitize_text_field($_POST['_video_slug'] ?? '');
-        $video_description = sanitize_textarea_field($_POST['_video_description'] ?? '');
-        $video_file = sanitize_text_field($_POST['_video_file'] ?? '');
+        // Verify nonce
+        if (!isset($_POST['wsvl_video_nonce']) || !wp_verify_nonce($_POST['wsvl_video_nonce'], 'wsvl_save_video_data')) {
+            return;
+        }
+
+        // Unslash and sanitize input
+        $video_slug = sanitize_text_field(wp_unslash($_POST['_video_slug'] ?? ''));
+        $video_description = sanitize_textarea_field(wp_unslash($_POST['_video_description'] ?? ''));
+        $video_file = sanitize_text_field(wp_unslash($_POST['_video_file'] ?? ''));
 
         update_post_meta($post_id, '_video_slug', $video_slug);
         update_post_meta($post_id, '_video_description', $video_description);
@@ -123,7 +129,15 @@ class ProductVideoManager {
             wp_send_json_error('No video file uploaded');
         }
 
-        $file = $_FILES['video'];
+        // Initialize WordPress filesystem
+        global $wp_filesystem;
+        if (empty($wp_filesystem)) {
+            require_once(ABSPATH . '/wp-admin/includes/file.php');
+            WP_Filesystem();
+        }
+
+        // Sanitize file data
+        $file = array_map('sanitize_text_field', $_FILES['video']);
         $allowed_types = ['video/mp4', 'video/webm', 'video/ogg'];
         
         if (!in_array($file['type'], $allowed_types)) {
@@ -134,13 +148,13 @@ class ProductVideoManager {
         $filename = wp_unique_filename(WSVL_PRIVATE_VIDEOS_DIR, $file['name']);
         $filepath = WSVL_PRIVATE_VIDEOS_DIR . $filename;
 
-        // Move uploaded file
-        if (!move_uploaded_file($file['tmp_name'], $filepath)) {
+        // Use WordPress filesystem to move the file
+        if (!$wp_filesystem->move($file['tmp_name'], $filepath)) {
             wp_send_json_error('Failed to move uploaded file');
         }
 
-        // Set proper permissions
-        chmod($filepath, 0644);
+        // Set proper permissions using WordPress filesystem
+        $wp_filesystem->chmod($filepath, 0644);
 
         wp_send_json_success([
             'file' => $filename,
@@ -156,12 +170,12 @@ class ProductVideoManager {
         if ($video_slug) {
             ?>
             <div class="video-preview">
-                <h3><?php _e('Video Preview', 'woo-secure-video-locker'); ?></h3>
+                <h3><?php esc_html_e('Video Preview', 'woo-secure-video-locker'); ?></h3>
                 <?php if ($video_description) : ?>
                     <p><?php echo esc_html($video_description); ?></p>
                 <?php endif; ?>
                 <div class="video-preview-placeholder">
-                    <?php _e('Purchase this product to access the full video content.', 'woo-secure-video-locker'); ?>
+                    <?php esc_html_e('Purchase this product to access the full video content.', 'woo-secure-video-locker'); ?>
                 </div>
             </div>
             <?php

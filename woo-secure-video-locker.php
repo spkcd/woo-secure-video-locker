@@ -1,13 +1,15 @@
 <?php
 /**
- * Plugin Name: Woo Secure Video Locker
- * Plugin URI: https://yourwebsite.com/woo-secure-video-locker
+ * Plugin Name: Secure Video Locker for WooCommerce
+ * Plugin URI: https://yourwebsite.com/secure-video-locker-for-woocommerce
  * Description: Securely deliver video content to WooCommerce customers with temporary, signed URLs and automatic refresh.
  * Version: 1.0.0
- * Author: Your Name
- * Author URI: https://yourwebsite.com
- * Text Domain: woo-secure-video-locker
- * Domain Path: /languages
+ * Author: SPARKWEB Studio
+ * Author URI: https://sparkwebstudio.com/
+ * License: GPL v2 or later
+ * License URI: https://www.gnu.org/licenses/gpl-2.0.html
+ * Text Domain: secure-video-locker-for-woocommerce
+ * Domain Path: languages
  * Requires at least: 5.8
  * Requires PHP: 7.4
  * WC requires at least: 5.0
@@ -29,7 +31,7 @@ if (!in_array('woocommerce/woocommerce.php', apply_filters('active_plugins', get
     add_action('admin_notices', function() {
         ?>
         <div class="notice notice-error">
-            <p><?php _e('Woo Secure Video Locker requires WooCommerce to be installed and active.', 'woo-secure-video-locker'); ?></p>
+            <p><?php esc_html_e('Secure Video Locker for WooCommerce requires WooCommerce to be installed and active.', 'secure-video-locker-for-woocommerce'); ?></p>
         </div>
         <?php
     });
@@ -66,7 +68,7 @@ function wsvl_init() {
     file_put_contents(WSVL_PRIVATE_VIDEOS_DIR . '.htaccess', $htaccess_content);
 
     // Load text domain
-    load_plugin_textdomain('woo-secure-video-locker', false, dirname(plugin_basename(__FILE__)) . '/languages');
+    load_plugin_textdomain('secure-video-locker-for-woocommerce', false, dirname(plugin_basename(__FILE__)) . '/languages');
 
     // Initialize plugin components
     new \WSVL\Admin\ProductVideoManager();
@@ -104,6 +106,9 @@ function wsvl_register_assets() {
 
 // Activation hook
 register_activation_hook(__FILE__, function() {
+    // Note: No nonce verification needed here as this is a WordPress core hook
+    // that runs only during plugin activation, not in response to user input.
+    
     // Create necessary directories
     if (!file_exists(WSVL_PRIVATE_VIDEOS_DIR)) {
         wp_mkdir_p(WSVL_PRIVATE_VIDEOS_DIR);

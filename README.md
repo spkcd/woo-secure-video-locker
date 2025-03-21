@@ -1,4 +1,13 @@
-# Woo Secure Video Locker
+# Secure Video Locker for WooCommerce
+
+Contributors: sparkwebstudio
+Tags: video, streaming, security, woocommerce, content protection
+Requires at least: 5.8
+Tested up to: 6.4
+Requires PHP: 7.4
+Stable tag: 1.0.0
+License: GPLv2 or later
+License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
 A WordPress plugin that provides secure video streaming for WooCommerce products, preventing unauthorized downloads while maintaining a great user experience.
 
@@ -116,9 +125,9 @@ Contributions are welcome! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for det
 
 For support, please:
 
-1. Check the [documentation](https://krischislett.com/woo-secure-video-locker-docs)
+1. Check the [documentation](https://yourwebsite.com/woo-secure-video-locker-docs)
 2. Visit the [support forum](https://wordpress.org/support/plugin/woo-secure-video-locker/)
-3. For premium support, contact us at valentin@krischislett.com
+3. For premium support, contact us at support@yourwebsite.com
 
 ## 🔗 Related
 
