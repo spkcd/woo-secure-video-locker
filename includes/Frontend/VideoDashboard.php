@@ -3,23 +3,37 @@ namespace WSVL\Frontend;
 
 class VideoDashboard {
     public function __construct() {
-        add_action('init', [$this, 'add_endpoints']);
+        add_action('init', [$this, 'register_endpoints']);
         add_filter('woocommerce_account_menu_items', [$this, 'add_video_menu_item']);
-        add_action('woocommerce_account_secure-videos_endpoint', [$this, 'video_dashboard_content']);
+        add_action('woocommerce_account_secure-videos_endpoint', [$this, 'render_video_dashboard']);
         add_action('wp_enqueue_scripts', [$this, 'enqueue_scripts']);
         add_action('wp_ajax_refresh_video_url', [$this, 'ajax_refresh_video_url']);
     }
 
-    public function add_endpoints() {
+    public function register_endpoints() {
         add_rewrite_endpoint('secure-videos', EP_ROOT | EP_PAGES);
     }
 
     public function add_video_menu_item($items) {
-        $items['secure-videos'] = __('My Videos', 'woo-secure-video-locker');
-        return $items;
+        $new_items = [];
+        
+        // Add the video menu item after dashboard
+        foreach ($items as $key => $item) {
+            $new_items[$key] = $item;
+            if ($key === 'dashboard') {
+                $new_items['secure-videos'] = __('My Videos', 'secure-video-locker-for-woocommerce');
+            }
+        }
+        
+        return $new_items;
     }
 
-    public function video_dashboard_content() {
+    public function render_video_dashboard() {
+        if (!is_user_logged_in()) {
+            wp_redirect(wc_get_page_permalink('myaccount'));
+            exit;
+        }
+
         $user_id = get_current_user_id();
         $orders = wc_get_orders([
             'customer_id' => $user_id,
@@ -36,43 +50,42 @@ class VideoDashboard {
                     $video_products[] = [
                         'product_id' => $product_id,
                         'video_slug' => $video_slug,
-                        'product_name' => $item->get_name(),
-                        'video_description' => get_post_meta($product_id, '_video_description', true),
+                        'title' => $item->get_name(),
+                        'description' => get_post_meta($product_id, '_video_description', true),
+                        'order_date' => $order->get_date_created()->format('Y-m-d'),
                     ];
                 }
             }
         }
 
         if (empty($video_products)) {
-            echo '<p>' . esc_html__('You haven\'t purchased any video products yet.', 'woo-secure-video-locker') . '</p>';
+            echo '<div class="wsvl-no-videos">';
+            echo '<p>' . esc_html__('You haven\'t purchased any video products yet.', 'secure-video-locker-for-woocommerce') . '</p>';
+            echo '<a href="' . esc_url(get_permalink(wc_get_page_id('shop'))) . '" class="button">' . 
+                 esc_html__('Browse Products', 'secure-video-locker-for-woocommerce') . '</a>';
+            echo '</div>';
             return;
         }
 
         ?>
         <div class="wsvl-video-dashboard">
-            <?php foreach ($video_products as $video) : 
-                $video_url = \WSVL\Security\VideoStreamer::generate_signed_url($video['video_slug']);
-            ?>
-                <div class="wsvl-video-item" data-video-slug="<?php echo esc_attr($video['video_slug']); ?>">
-                    <h3><?php echo esc_html($video['product_name']); ?></h3>
-                    <?php if ($video['video_description']) : ?>
-                        <p><?php echo esc_html($video['video_description']); ?></p>
+            <?php foreach ($video_products as $product) : ?>
+                <div class="wsvl-video-item">
+                    <h3><?php echo esc_html($product['title']); ?></h3>
+                    <?php if ($product['description']) : ?>
+                        <p class="description"><?php echo esc_html($product['description']); ?></p>
                     <?php endif; ?>
-                    <div class="wsvl-video-container">
-                        <!-- Add user info as watermark -->
-                        <div class="wsvl-watermark"><?php echo esc_html(wp_get_current_user()->user_email); ?></div>
-                        
-                        <video 
-                            data-slug="<?php echo esc_attr($video['video_slug']); ?>"
-                            controls
-                            controlsList="nodownload noremoteplayback"
-                            disablePictureInPicture
-                            oncontextmenu="return false;"
-                        >
-                            <source src="<?php echo esc_url($video_url . '&chunk=0'); ?>" type="video/mp4">
-                            <?php esc_html_e('Your browser does not support the video tag.', 'woo-secure-video-locker'); ?>
-                        </video>
-                    </div>
+                    <p class="purchase-date">
+                        <?php echo esc_html__('Purchased on: ', 'secure-video-locker-for-woocommerce') . 
+                             esc_html($product['order_date']); ?>
+                    </p>
+                    <?php 
+                    // Set required variables for the template
+                    $video_slug = $product['video_slug'];
+                    $video_description = $product['description'];
+                    // Include our secure video display template
+                    include WSVL_PLUGIN_DIR . 'templates/video-display.php';
+                    ?>
                 </div>
             <?php endforeach; ?>
         </div>
@@ -81,13 +94,23 @@ class VideoDashboard {
 
     public function enqueue_scripts() {
         if (is_account_page() && is_wc_endpoint_url('secure-videos')) {
+            // Enqueue dashicons for our player controls
+            wp_enqueue_style('dashicons');
+            
             wp_enqueue_style(
                 'wsvl-video-dashboard',
                 WSVL_PLUGIN_URL . 'assets/css/video-dashboard.css',
                 [],
                 WSVL_VERSION
             );
-
+            
+            // Disable the default video player script
+            wp_dequeue_script('wsvl-video-player');
+            
+            // Make sure jQuery is loaded
+            wp_enqueue_script('jquery');
+            
+            // Enqueue our secure video player scripts instead
             wp_enqueue_script(
                 'wsvl-video-dashboard',
                 WSVL_PLUGIN_URL . 'assets/js/video-dashboard.js',
@@ -99,6 +122,7 @@ class VideoDashboard {
             wp_localize_script('wsvl-video-dashboard', 'wsvlData', [
                 'ajaxUrl' => admin_url('admin-ajax.php'),
                 'nonce' => wp_create_nonce('wsvl-video-nonce'),
+                'debug' => true
             ]);
         }
     }

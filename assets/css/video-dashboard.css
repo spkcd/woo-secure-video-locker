@@ -1,66 +1,148 @@
+/**
+ * Video Dashboard CSS
+ */
+
+/* Video dashboard container */
 .wsvl-video-dashboard {
-    max-width: 1200px;
-    margin: 0 auto;
-    padding: 20px;
+    margin: 20px 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen-Sans, Ubuntu, Cantarell, "Helvetica Neue", sans-serif;
 }
 
+/* Video item styles */
 .wsvl-video-item {
-    background: #fff;
-    border-radius: 8px;
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-    margin-bottom: 30px;
+    margin-bottom: 40px;
+    border: 1px solid #ddd;
+    border-radius: 5px;
     padding: 20px;
+    background: #fff;
 }
 
 .wsvl-video-item h3 {
-    margin: 0 0 15px;
+    margin-top: 0;
     color: #333;
-    font-size: 1.5em;
 }
 
-.wsvl-video-item p {
-    margin: 0 0 20px;
+.wsvl-video-item p.description {
+    margin-bottom: 15px;
     color: #666;
-    line-height: 1.6;
 }
 
-.wsvl-video-player {
+.wsvl-video-item p.purchase-date {
+    font-size: 14px;
+    color: #888;
+    margin-bottom: 15px;
+}
+
+/* Video container */
+.wsvl-video-container {
+    max-width: 800px;
+    margin: 0 auto;
+}
+
+.wsvl-video-wrapper {
     position: relative;
     width: 100%;
-    padding-top: 56.25%; /* 16:9 Aspect Ratio */
+    padding-top: 56.25%; /* 16:9 aspect ratio */
     background: #000;
-    border-radius: 4px;
     overflow: hidden;
+    border-radius: 5px;
 }
 
-.wsvl-video-player video {
+/* Canvas styles */
+#wsvl-video-canvas {
     position: absolute;
     top: 0;
     left: 0;
     width: 100%;
     height: 100%;
-    object-fit: contain;
+    background: #000;
 }
 
-.video-preview {
-    background: #f8f9fa;
-    border: 1px solid #dee2e6;
-    border-radius: 4px;
-    padding: 20px;
-    margin-bottom: 20px;
+/* Video controls */
+.wsvl-video-controls {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    background: rgba(0, 0, 0, 0.7);
+    padding: 10px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    opacity: 0;
+    transition: opacity 0.3s ease;
+    z-index: 30;
 }
 
-.video-preview h3 {
-    margin: 0 0 10px;
-    color: #333;
+.wsvl-video-wrapper:hover .wsvl-video-controls {
+    opacity: 1;
 }
 
-.video-preview-placeholder {
-    background: #e9ecef;
-    border-radius: 4px;
-    padding: 20px;
+.wsvl-video-controls button {
+    background: none;
+    border: none;
+    color: white;
+    cursor: pointer;
+    padding: 5px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 35;
+}
+
+.wsvl-video-controls button:hover {
+    color: #ddd;
+}
+
+.wsvl-progress-bar {
+    flex: 1;
+    height: 4px;
+    background: rgba(255, 255, 255, 0.3);
+    cursor: pointer;
+    position: relative;
+    z-index: 35;
+}
+
+.wsvl-progress {
+    position: absolute;
+    top: 0;
+    left: 0;
+    height: 100%;
+    background: white;
+    width: 0;
+}
+
+.wsvl-time {
+    color: white;
+    font-size: 14px;
+    min-width: 100px;
     text-align: center;
-    color: #6c757d;
+    z-index: 35;
+}
+
+.wsvl-volume-slider {
+    width: 60px;
+    height: 4px;
+    background: rgba(255, 255, 255, 0.3);
+    cursor: pointer;
+    position: relative;
+    z-index: 35;
+}
+
+.wsvl-volume-progress {
+    position: absolute;
+    top: 0;
+    left: 0;
+    height: 100%;
+    background: white;
+    width: 100%;
+}
+
+.wsvl-video-description {
+    margin-top: 15px;
+    padding: 15px;
+    background: #f5f5f5;
+    border-radius: 4px;
 }
 
 /* Responsive adjustments */

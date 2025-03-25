@@ -1,29 +1,89 @@
 /**
- * Video Protection Styles
+ * Global Video Protection Styles - Applied to all video elements
  */
 
-/* Disable selection on videos */
+/* Completely hide all native video controls in all browsers */
+video::-webkit-media-controls,
+video::-webkit-media-controls-panel,
+video::-webkit-media-controls-panel-container,
+video::-webkit-media-controls-start-playback-button,
+video::-webkit-media-controls-enclosure,
+video::-webkit-media-controls-overlay-enclosure,
+video::-webkit-media-controls-play-button,
+video::-webkit-media-controls-timeline,
+video::-webkit-media-controls-current-time-display,
+video::-webkit-media-controls-time-remaining-display,
+video::-webkit-media-controls-time-control-container,
+video::-webkit-media-controls-toggle-closed-captions-button,
+video::-webkit-media-controls-fullscreen-button,
+video::-webkit-media-controls-rewind-button,
+video::-webkit-media-controls-return-to-realtime-button,
+video::-webkit-media-controls-seek-back-button,
+video::-webkit-media-controls-seek-forward-button,
+video::-webkit-media-controls-mute-button,
+video::-webkit-media-controls-volume-slider,
+video::-webkit-media-controls-volume-slider-container,
+video::-webkit-media-controls-volume-control-container,
+video::-webkit-media-controls-rewind,
+video::-webkit-media-controls-download-button,
+video::-webkit-media-controls-picture-in-picture-button,
+video::-webkit-media-controls-timeline-container,
+video::-webkit-media-controls-element,
+video::-internal-media-controls-download-button,
+video::-moz-media-controls,
+video::-ms-media-controls {
+    display: none !important;
+    opacity: 0 !important;
+    pointer-events: none !important;
+    width: 0px !important;
+    height: 0px !important;
+    visibility: hidden !important;
+}
+
+/* Force inline styles that remove all accessibility of video controls */
 video {
+    pointer-events: none !important;
     -webkit-user-select: none !important;
     -moz-user-select: none !important;
     -ms-user-select: none !important;
     user-select: none !important;
-    -webkit-touch-callout: none !important;
-    pointer-events: none !important;
 }
 
-/* Hide download button in browser controls */
-video::-webkit-media-controls-download-button {
-    display: none !important;
-}
-
-video::-webkit-media-controls-enclosure {
-    overflow: hidden !important;
-}
-
-/* Prevent download button from appearing even if browser attempts to show it */
+/* Hide all browser panels */
+video::-webkit-media-controls-enclosure,
 video::-webkit-media-controls-panel {
-    width: calc(100% + 30px) !important;
+    visibility: hidden !important;
+    opacity: 0 !important;
+    display: none !important;
+    pointer-events: none !important;
+    height: 0 !important;
+}
+
+/* Hide right-click context menu */
+.wsvl-video-wrapper {
+    -webkit-touch-callout: none !important;
+    -webkit-user-select: none !important;
+    -moz-user-select: none !important;
+    -ms-user-select: none !important;
+    user-select: none !important;
+}
+
+/* Make sure canvas fills the container */
+#wsvl-video-canvas {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+    background: #000;
+    cursor: pointer;
+}
+
+/* Custom styles for our canvas-based player */
+.wsvl-canvas-player {
+    position: relative;
+    width: 100%;
+    padding-top: 56.25%; /* 16:9 Aspect Ratio */
+    background: #000;
+    overflow: hidden;
 }
 
 /* Video container styling */

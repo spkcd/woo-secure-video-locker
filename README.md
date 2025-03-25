@@ -5,13 +5,13 @@ Tags: video, streaming, security, woocommerce, content protection
 Requires at least: 5.8
 Tested up to: 6.4
 Requires PHP: 7.4
-Stable tag: 1.0.0
+Stable tag: 1.1.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
 A WordPress plugin that provides secure video streaming for WooCommerce products, preventing unauthorized downloads while maintaining a great user experience.
 
-![Version](https://img.shields.io/badge/version-1.0.0-blue.svg)
+![Version](https://img.shields.io/badge/version-1.1.0-blue.svg)
 ![WP tested](https://img.shields.io/badge/WordPress-5.8+-green.svg)
 ![WC tested](https://img.shields.io/badge/WooCommerce-5.0+-purple.svg)
 ![PHP](https://img.shields.io/badge/PHP-7.4+-orange.svg)
@@ -19,6 +19,12 @@ A WordPress plugin that provides secure video streaming for WooCommerce products
 ## 🔒 Features
 
 - **Secure Video Streaming**: Delivers videos through temporary, signed URLs that expire automatically
+- **Custom Video Player**: Enhanced HTML5 video player with:
+  - Clean, modern interface
+  - Custom playback controls
+  - Progress bar with buffering indicator
+  - Volume control with mute option
+  - Fullscreen support
 - **Anti-Download Protection**: Multiple layers of security to prevent video downloads:
   - Chunked video delivery
   - Right-click protection
