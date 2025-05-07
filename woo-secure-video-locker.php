@@ -3,7 +3,7 @@
  * Plugin Name: Secure Video Locker for WooCommerce
  * Plugin URI: https://yourwebsite.com/secure-video-locker-for-woocommerce
  * Description: Securely deliver video content to WooCommerce customers with temporary, signed URLs and automatic refresh.
- * Version: 1.1.0
+ * Version: 1.0.0
  * Author: SPARKWEB Studio
  * Author URI: https://sparkwebstudio.com/
  * License: GPL v2 or later
@@ -21,10 +21,13 @@ if (!defined('ABSPATH')) {
 }
 
 // Define plugin constants
-define('WSVL_VERSION', '1.1.0');
+define('WSVL_VERSION', '1.0.0');
 define('WSVL_PLUGIN_DIR', plugin_dir_path(__FILE__));
 define('WSVL_PLUGIN_URL', plugin_dir_url(__FILE__));
 define('WSVL_PRIVATE_VIDEOS_DIR', trailingslashit(WP_CONTENT_DIR) . 'private-videos/');
+
+// Include upload configuration
+require_once WSVL_PLUGIN_DIR . 'upload-config.php';
 
 // Ensure WooCommerce is active
 if (!in_array('woocommerce/woocommerce.php', apply_filters('active_plugins', get_option('active_plugins')))) {
@@ -116,6 +119,7 @@ EOT;
     new \WSVL\Admin\ProductVideoManager();
     new \WSVL\Frontend\VideoDashboard();
     new \WSVL\Security\VideoStreamer();
+    new \WSVL\Admin\Settings();
     
     // Register scripts and styles
     add_action('wp_enqueue_scripts', 'wsvl_register_assets');
@@ -225,6 +229,55 @@ EOT;
 
     // Flush rewrite rules on activation
     flush_rewrite_rules();
+}
+
+/**
+ * Add roles and capabilities for the plugin
+ */
+function wsvl_add_roles_and_capabilities() {
+    // Get admin role
+    $admin = get_role('administrator');
+    
+    // Add capability to manage videos to admin role
+    if ($admin) {
+        $admin->add_cap('manage_wsvl_videos');
+        $admin->add_cap('view_wsvl_reports');
+    }
+    
+    // Shop manager role
+    $shop_manager = get_role('shop_manager');
+    if ($shop_manager) {
+        $shop_manager->add_cap('manage_wsvl_videos');
+        $shop_manager->add_cap('view_wsvl_reports');
+    }
+}
+
+/**
+ * Setup database tables needed by the plugin
+ */
+function wsvl_setup_database() {
+    global $wpdb;
+    
+    $charset_collate = $wpdb->get_charset_collate();
+    
+    // Create table for video access logs
+    $table_name = $wpdb->prefix . 'wsvl_access_logs';
+    
+    $sql = "CREATE TABLE IF NOT EXISTS $table_name (
+        id bigint(20) NOT NULL AUTO_INCREMENT,
+        user_id bigint(20) NOT NULL,
+        video_slug varchar(255) NOT NULL,
+        access_time datetime DEFAULT CURRENT_TIMESTAMP NOT NULL,
+        ip_address varchar(100) NOT NULL,
+        user_agent text NOT NULL,
+        status varchar(20) NOT NULL,
+        PRIMARY KEY  (id),
+        KEY user_id (user_id),
+        KEY video_slug (video_slug)
+    ) $charset_collate;";
+    
+    require_once(ABSPATH . 'wp-admin/includes/upgrade.php');
+    dbDelta($sql);
 }
 
 // Activation hook

@@ -68,10 +68,10 @@
                 return;
             }
 
-            // Validate file size (max 500MB)
-            const maxSize = 500 * 1024 * 1024; // 500MB in bytes
+            // Validate file size (max 2GB)
+            const maxSize = 2 * 1024 * 1024 * 1024; // 2GB in bytes
             if (file.size > maxSize) {
-                alert(wsvlAdmin.uploadError + ' File size must be less than 500MB.');
+                alert(wsvlAdmin.uploadError + ' File size must be less than 2GB.');
                 return;
             }
 
@@ -93,48 +93,113 @@
         }
 
         async uploadFile(file) {
-            const formData = new FormData();
-            formData.append('action', 'wsvl_upload_video');
-            formData.append('nonce', wsvlAdmin.nonce);
-            formData.append('video', file);
+            const CHUNK_SIZE = 5 * 1024 * 1024; // 5MB chunks
+            const totalChunks = Math.ceil(file.size / CHUNK_SIZE);
+            let uploadedChunks = 0;
 
             this.statusSpan.text(wsvlAdmin.uploading);
             this.progressBar.show();
             this.progressBar.find('.wsvl-progress').css('width', '0%');
 
             try {
-                const response = await $.ajax({
+                console.log('Starting chunked upload to:', wsvlAdmin.ajaxUrl);
+                console.log('File details:', {
+                    name: file.name,
+                    type: file.type,
+                    size: file.size,
+                    totalChunks: totalChunks
+                });
+
+                // First, initiate the upload
+                const initResponse = await $.ajax({
                     url: wsvlAdmin.ajaxUrl,
                     type: 'POST',
-                    data: formData,
-                    processData: false,
-                    contentType: false,
-                    xhr: () => {
-                        const xhr = new window.XMLHttpRequest();
-                        xhr.upload.addEventListener('progress', (evt) => {
-                            if (evt.lengthComputable) {
-                                const percentComplete = (evt.loaded / evt.total) * 100;
-                                this.updateProgress(percentComplete);
-                            }
-                        }, false);
-                        return xhr;
+                    data: {
+                        action: 'wsvl_init_upload',
+                        nonce: wsvlAdmin.nonce,
+                        filename: file.name,
+                        totalChunks: totalChunks,
+                        totalSize: file.size
                     }
                 });
 
-                if (response.success) {
-                    this.videoFileInput.val(response.data.file);
-                    this.videoPreview.html(`
-                        <p class="description">
-                            ${wsvlAdmin.uploadComplete}<br>
-                            <strong>${response.data.file}</strong>
-                        </p>
-                    `);
-                    this.statusSpan.text('');
-                    this.progressBar.hide();
-                } else {
-                    throw new Error(response.data || wsvlAdmin.uploadError);
+                if (!initResponse.success) {
+                    throw new Error(initResponse.data || 'Failed to initialize upload');
                 }
+
+                const uploadId = initResponse.data.uploadId;
+
+                // Upload chunks
+                for (let chunkIndex = 0; chunkIndex < totalChunks; chunkIndex++) {
+                    const start = chunkIndex * CHUNK_SIZE;
+                    const end = Math.min(start + CHUNK_SIZE, file.size);
+                    const chunk = file.slice(start, end);
+
+                    const formData = new FormData();
+                    formData.append('action', 'wsvl_upload_chunk');
+                    formData.append('nonce', wsvlAdmin.nonce);
+                    formData.append('uploadId', uploadId);
+                    formData.append('chunkIndex', chunkIndex);
+                    formData.append('chunk', chunk);
+
+                    const chunkResponse = await $.ajax({
+                        url: wsvlAdmin.ajaxUrl,
+                        type: 'POST',
+                        data: formData,
+                        processData: false,
+                        contentType: false,
+                        xhr: () => {
+                            const xhr = new window.XMLHttpRequest();
+                            xhr.upload.addEventListener('progress', (evt) => {
+                                if (evt.lengthComputable) {
+                                    const chunkProgress = (evt.loaded / evt.total) * (100 / totalChunks);
+                                    const totalProgress = (uploadedChunks * (100 / totalChunks)) + chunkProgress;
+                                    this.updateProgress(totalProgress);
+                                }
+                            }, false);
+                            return xhr;
+                        }
+                    });
+
+                    if (!chunkResponse.success) {
+                        throw new Error(chunkResponse.data || 'Failed to upload chunk');
+                    }
+
+                    uploadedChunks++;
+                }
+
+                // Complete the upload
+                const completeResponse = await $.ajax({
+                    url: wsvlAdmin.ajaxUrl,
+                    type: 'POST',
+                    data: {
+                        action: 'wsvl_complete_upload',
+                        nonce: wsvlAdmin.nonce,
+                        uploadId: uploadId
+                    }
+                });
+
+                if (!completeResponse.success) {
+                    throw new Error(completeResponse.data || 'Failed to complete upload');
+                }
+
+                this.videoFileInput.val(completeResponse.data.file);
+                this.videoPreview.html(`
+                    <p class="description">
+                        ${wsvlAdmin.uploadComplete}<br>
+                        <strong>${completeResponse.data.file}</strong>
+                    </p>
+                `);
+                this.statusSpan.text('');
+                this.progressBar.hide();
+
             } catch (error) {
+                console.error('Upload error details:', {
+                    error: error,
+                    status: error.status,
+                    statusText: error.statusText,
+                    responseText: error.responseText
+                });
                 this.statusSpan.text(wsvlAdmin.uploadError);
                 this.progressBar.hide();
                 console.error('Upload error:', error);

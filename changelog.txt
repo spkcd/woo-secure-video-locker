@@ -1,0 +1,30 @@
+Version 1.0.1 - [Current Date]
+
+Enhancements:
+- Implemented chunked upload support for large video files
+- Added progress bar for upload status
+- Increased maximum upload size to 2GB
+- Added better error handling and logging
+
+Technical Changes:
+- Modified admin-product.js to support chunked uploads (5MB chunks)
+- Updated ProductVideoManager.php with new chunked upload handlers
+- Added upload-config.php for PHP upload limit configuration
+- Added .htaccess configuration for upload limits
+- Improved error logging throughout the upload process
+
+Bug Fixes:
+- Fixed HTTP/2 protocol errors with large file uploads
+- Fixed timeout issues with large video uploads
+- Improved error handling for failed uploads
+
+Security:
+- Added proper file type validation
+- Added nonce verification for all upload operations
+- Added proper permission checks
+- Improved file handling security
+
+Dependencies:
+- Requires PHP 7.4 or higher
+- Requires WordPress 5.8 or higher
+- Requires WooCommerce 5.0 or higher 

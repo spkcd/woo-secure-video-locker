@@ -61,7 +61,11 @@ class VideoDashboard {
         if (empty($video_products)) {
             echo '<div class="wsvl-no-videos">';
             echo '<p>' . esc_html__('You haven\'t purchased any video products yet.', 'secure-video-locker-for-woocommerce') . '</p>';
-            echo '<a href="' . esc_url(get_permalink(wc_get_page_id('shop'))) . '" class="button">' . 
+            
+            // Get custom URL from options or use default shop page
+            $browse_products_url = get_option('wsvl_browse_products_url', get_permalink(wc_get_page_id('shop')));
+            
+            echo '<a href="' . esc_url($browse_products_url) . '" class="button">' . 
                  esc_html__('Browse Products', 'secure-video-locker-for-woocommerce') . '</a>';
             echo '</div>';
             return;
