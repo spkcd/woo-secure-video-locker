@@ -11,10 +11,8 @@ class ProductVideoManager {
         // Enqueue admin scripts
         add_action('admin_enqueue_scripts', [$this, 'enqueue_admin_scripts']);
         
-        // Chunked upload handlers
-        add_action('wp_ajax_wsvl_init_upload', [$this, 'handle_init_upload']);
-        add_action('wp_ajax_wsvl_upload_chunk', [$this, 'handle_upload_chunk']);
-        add_action('wp_ajax_wsvl_complete_upload', [$this, 'handle_complete_upload']);
+        // Initialize the chunked uploader
+        new ChunkedUploader();
     }
 
     public function enqueue_admin_scripts($hook) {
@@ -22,22 +20,47 @@ class ProductVideoManager {
             return;
         }
 
-        wp_enqueue_media();
+        $screen = get_current_screen();
+        if (!$screen || $screen->post_type !== 'product') {
+            return;
+        }
+
+        // Enqueue Plupload for chunked uploads
+        wp_enqueue_script('plupload-all');
+        
+        // jQuery UI for the progress bar
+        wp_enqueue_script('jquery-ui-progressbar');
+        wp_enqueue_style('jquery-ui', 'https://code.jquery.com/ui/1.12.1/themes/base/jquery-ui.css');
+        
+        // Our custom script for handling chunked uploads
         wp_enqueue_script(
-            'wsvl-admin',
-            WSVL_PLUGIN_URL . 'assets/js/admin-product.js',
-            ['jquery'],
+            'wsvl-chunked-upload',
+            WSVL_PLUGIN_URL . 'assets/js/chunked-upload.js',
+            ['jquery', 'plupload-all', 'jquery-ui-progressbar'],
             WSVL_VERSION,
             true
         );
-
-        wp_localize_script('wsvl-admin', 'wsvlAdmin', [
-            'ajaxUrl' => admin_url('admin-ajax.php'),
-            'nonce' => wp_create_nonce('wsvl-admin-nonce'),
-            'uploading' => __('Uploading...', 'secure-video-locker-for-woocommerce'),
-            'uploadComplete' => __('Upload complete!', 'secure-video-locker-for-woocommerce'),
-            'uploadError' => __('Upload failed. Please try again.', 'secure-video-locker-for-woocommerce'),
+        
+        // Pass data to JavaScript
+        wp_localize_script('wsvl-chunked-upload', 'wsvl_upload', [
+            'ajax_url' => admin_url('admin-ajax.php'),
+            'nonce' => wp_create_nonce('wsvl-upload-video'),
+            'chunk_size' => 1024 * 1024 * 2, // 2MB chunks
+            'max_file_size' => '2048mb',
+            'i18n' => [
+                'uploading' => __('Uploading...', 'secure-video-locker-for-woocommerce'),
+                'upload_complete' => __('Upload complete!', 'secure-video-locker-for-woocommerce'),
+                'upload_error' => __('Upload failed. Please try again.', 'secure-video-locker-for-woocommerce')
+            ]
         ]);
+        
+        // Admin styles
+        wp_enqueue_style(
+            'wsvl-admin',
+            WSVL_PLUGIN_URL . 'assets/css/admin.css',
+            [],
+            WSVL_VERSION
+        );
     }
 
     public function add_video_product_data_tab($tabs) {
@@ -55,45 +78,8 @@ class ProductVideoManager {
         ?>
         <div id="video_product_data" class="panel woocommerce_options_panel">
             <?php
-            // Video Slug
-            woocommerce_wp_text_input([
-                'id' => '_video_slug',
-                'label' => __('Video Slug', 'secure-video-locker-for-woocommerce'),
-                'description' => __('Unique identifier for the video file (e.g., course-101-intro)', 'secure-video-locker-for-woocommerce'),
-                'value' => get_post_meta($post->ID, '_video_slug', true),
-            ]);
-
-            // Video Description
-            woocommerce_wp_textarea_input([
-                'id' => '_video_description',
-                'label' => __('Video Description', 'secure-video-locker-for-woocommerce'),
-                'description' => __('Brief description of the video content', 'secure-video-locker-for-woocommerce'),
-                'value' => get_post_meta($post->ID, '_video_description', true),
-            ]);
-
-            // Video File Upload
-            $video_file = get_post_meta($post->ID, '_video_file', true);
-            ?>
-            <div class="options_group">
-                <p class="form-field">
-                    <label for="_video_file"><?php esc_html_e('Video File', 'secure-video-locker-for-woocommerce'); ?></label>
-                    <input type="hidden" id="_video_file" name="_video_file" value="<?php echo esc_attr($video_file); ?>">
-                    <button type="button" class="button" id="wsvl-upload-video">
-                        <?php esc_html_e('Upload Video', 'secure-video-locker-for-woocommerce'); ?>
-                    </button>
-                    <span class="wsvl-upload-status"></span>
-                    <div class="wsvl-video-preview">
-                        <?php if ($video_file) : ?>
-                            <p class="description">
-                                <?php esc_html_e('Current video:', 'secure-video-locker-for-woocommerce'); ?>
-                                <strong><?php echo esc_html($video_file); ?></strong>
-                            </p>
-                        <?php endif; ?>
-                    </div>
-                </p>
-            </div>
-            <?php
-            do_action('woocommerce_product_options_end');
+            // Include our custom template instead of using the WooCommerce field builder
+            include WSVL_PLUGIN_DIR . 'templates/admin-product-video.php';
             ?>
         </div>
         <?php
@@ -108,172 +94,6 @@ class ProductVideoManager {
         update_post_meta($post_id, '_video_slug', $video_slug);
         update_post_meta($post_id, '_video_description', $video_description);
         update_post_meta($post_id, '_video_file', $video_file);
-    }
-
-    public function handle_init_upload() {
-        error_log('WSVL: Initializing chunked upload');
-        
-        try {
-            check_ajax_referer('wsvl-admin-nonce', 'nonce');
-
-            if (!current_user_can('edit_posts')) {
-                wp_send_json_error('Permission denied');
-            }
-
-            $filename = sanitize_file_name($_POST['filename']);
-            $totalChunks = intval($_POST['totalChunks']);
-            $totalSize = intval($_POST['totalSize']);
-
-            // Validate file type
-            $allowed_types = ['video/mp4', 'video/webm', 'video/ogg'];
-            $file_type = wp_check_filetype($filename)['type'];
-            if (!in_array($file_type, $allowed_types)) {
-                wp_send_json_error('Invalid file type. Only MP4, WebM, and OGG videos are allowed.');
-            }
-
-            // Generate unique upload ID
-            $upload_id = wp_generate_password(32, false);
-            
-            // Create temporary directory for chunks
-            $chunks_dir = WSVL_PRIVATE_VIDEOS_DIR . 'chunks/' . $upload_id;
-            if (!file_exists($chunks_dir)) {
-                wp_mkdir_p($chunks_dir);
-            }
-
-            // Store upload info
-            $upload_info = [
-                'filename' => $filename,
-                'totalChunks' => $totalChunks,
-                'totalSize' => $totalSize,
-                'uploadedChunks' => 0,
-                'started' => time()
-            ];
-            
-            update_option('wsvl_upload_' . $upload_id, $upload_info);
-
-            wp_send_json_success(['uploadId' => $upload_id]);
-        } catch (Exception $e) {
-            error_log('WSVL: Error initializing upload: ' . $e->getMessage());
-            wp_send_json_error('Failed to initialize upload: ' . $e->getMessage());
-        }
-    }
-
-    public function handle_upload_chunk() {
-        error_log('WSVL: Processing chunk upload');
-        
-        try {
-            check_ajax_referer('wsvl-admin-nonce', 'nonce');
-
-            if (!current_user_can('edit_posts')) {
-                wp_send_json_error('Permission denied');
-            }
-
-            $upload_id = sanitize_text_field($_POST['uploadId']);
-            $chunk_index = intval($_POST['chunkIndex']);
-
-            // Get upload info
-            $upload_info = get_option('wsvl_upload_' . $upload_id);
-            if (!$upload_info) {
-                wp_send_json_error('Invalid upload ID');
-            }
-
-            if (!isset($_FILES['chunk'])) {
-                wp_send_json_error('No chunk file uploaded');
-            }
-
-            // Initialize WordPress filesystem
-            global $wp_filesystem;
-            if (empty($wp_filesystem)) {
-                require_once(ABSPATH . '/wp-admin/includes/file.php');
-                WP_Filesystem();
-            }
-
-            if (!$wp_filesystem) {
-                wp_send_json_error('Failed to initialize filesystem');
-            }
-
-            // Save chunk
-            $chunks_dir = WSVL_PRIVATE_VIDEOS_DIR . 'chunks/' . $upload_id;
-            $chunk_file = $chunks_dir . '/' . $chunk_index;
-
-            if (!$wp_filesystem->move($_FILES['chunk']['tmp_name'], $chunk_file)) {
-                wp_send_json_error('Failed to save chunk');
-            }
-
-            // Update upload info
-            $upload_info['uploadedChunks']++;
-            update_option('wsvl_upload_' . $upload_id, $upload_info);
-
-            wp_send_json_success();
-        } catch (Exception $e) {
-            error_log('WSVL: Error processing chunk: ' . $e->getMessage());
-            wp_send_json_error('Failed to process chunk: ' . $e->getMessage());
-        }
-    }
-
-    public function handle_complete_upload() {
-        error_log('WSVL: Completing chunked upload');
-        
-        try {
-            check_ajax_referer('wsvl-admin-nonce', 'nonce');
-
-            if (!current_user_can('edit_posts')) {
-                wp_send_json_error('Permission denied');
-            }
-
-            $upload_id = sanitize_text_field($_POST['uploadId']);
-
-            // Get upload info
-            $upload_info = get_option('wsvl_upload_' . $upload_id);
-            if (!$upload_info) {
-                wp_send_json_error('Invalid upload ID');
-            }
-
-            // Initialize WordPress filesystem
-            global $wp_filesystem;
-            if (empty($wp_filesystem)) {
-                require_once(ABSPATH . '/wp-admin/includes/file.php');
-                WP_Filesystem();
-            }
-
-            if (!$wp_filesystem) {
-                wp_send_json_error('Failed to initialize filesystem');
-            }
-
-            // Generate unique filename
-            $filename = wp_unique_filename(WSVL_PRIVATE_VIDEOS_DIR, $upload_info['filename']);
-            $filepath = WSVL_PRIVATE_VIDEOS_DIR . $filename;
-
-            // Combine chunks
-            $chunks_dir = WSVL_PRIVATE_VIDEOS_DIR . 'chunks/' . $upload_id;
-            $output = fopen($filepath, 'wb');
-
-            for ($i = 0; $i < $upload_info['totalChunks']; $i++) {
-                $chunk_file = $chunks_dir . '/' . $i;
-                if (!file_exists($chunk_file)) {
-                    throw new Exception("Missing chunk $i");
-                }
-                $chunk = file_get_contents($chunk_file);
-                fwrite($output, $chunk);
-            }
-
-            fclose($output);
-
-            // Set proper permissions
-            $wp_filesystem->chmod($filepath, 0644);
-
-            // Clean up chunks
-            $wp_filesystem->rmdir($chunks_dir, true);
-            delete_option('wsvl_upload_' . $upload_id);
-
-            wp_send_json_success([
-                'file' => $filename,
-                'url' => WSVL_PRIVATE_VIDEOS_DIR . $filename
-            ]);
-        } catch (Exception $e) {
-            error_log('WSVL: Error completing upload: ' . $e->getMessage());
-            wp_send_json_error('Failed to complete upload: ' . $e->getMessage());
-        }
     }
 
     public function display_video_preview() {

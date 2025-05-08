@@ -128,9 +128,9 @@ add_action('plugins_loaded', 'wsvl_init');
 
 // Add rewrite rules at the correct time
 function wsvl_add_rewrite_rules() {
-    // Add rewrite rule for video requests
+    // Add rewrite rule for video requests - modified to handle the format properly
     add_rewrite_rule(
-        'wsvl_video=([^&]+)',
+        '^secure-videos/([^/]+)/?$',
         'index.php?wsvl_video=$matches[1]',
         'top'
     );
@@ -286,4 +286,22 @@ register_activation_hook(__FILE__, 'wsvl_activate');
 // Deactivation hook
 register_deactivation_hook(__FILE__, function() {
     flush_rewrite_rules();
-}); 
+});
+
+/**
+ * Force flush rewrite rules
+ * Call this function from the WordPress admin once after updating the plugin
+ */
+function wsvl_force_flush_rewrite_rules() {
+    // Update the option to ensure rules get flushed
+    update_option('wsvl_rewrite_rules_flushed', '0');
+    
+    // Register rewrite rules
+    wsvl_add_rewrite_rules();
+    
+    // Force flush
+    flush_rewrite_rules();
+    
+    // Log success
+    error_log('WSVL: Rewrite rules flushed successfully');
+} 

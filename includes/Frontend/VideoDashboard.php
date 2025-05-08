@@ -98,9 +98,10 @@ class VideoDashboard {
 
     public function enqueue_scripts() {
         if (is_account_page() && is_wc_endpoint_url('secure-videos')) {
-            // Enqueue dashicons for our player controls
-            wp_enqueue_style('dashicons');
+            // Make sure jQuery is loaded
+            wp_enqueue_script('jquery');
             
+            // Enqueue our custom CSS
             wp_enqueue_style(
                 'wsvl-video-dashboard',
                 WSVL_PLUGIN_URL . 'assets/css/video-dashboard.css',
@@ -108,13 +109,7 @@ class VideoDashboard {
                 WSVL_VERSION
             );
             
-            // Disable the default video player script
-            wp_dequeue_script('wsvl-video-player');
-            
-            // Make sure jQuery is loaded
-            wp_enqueue_script('jquery');
-            
-            // Enqueue our secure video player scripts instead
+            // Enqueue our custom JavaScript
             wp_enqueue_script(
                 'wsvl-video-dashboard',
                 WSVL_PLUGIN_URL . 'assets/js/video-dashboard.js',

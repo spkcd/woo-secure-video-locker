@@ -1,3 +1,7 @@
+/**
+ * Admin styles for the Secure Video Locker
+ */
+
 .wsvl-progress-bar {
     display: none;
     width: 100%;
@@ -32,4 +36,98 @@
 .wsvl-video-preview .description {
     margin: 0;
     color: #666;
+}
+
+.wsvl-uploader {
+    padding: 15px;
+    background: #f9f9f9;
+    border: 1px solid #e5e5e5;
+    margin-bottom: 20px;
+    border-radius: 4px;
+}
+
+.wsvl-file-list {
+    margin-top: 15px;
+}
+
+.wsvl-file-item {
+    padding: 10px;
+    background: #fff;
+    border: 1px solid #e5e5e5;
+    margin-bottom: 10px;
+    border-radius: 3px;
+}
+
+.wsvl-file-item .file-name {
+    font-weight: bold;
+    margin-bottom: 5px;
+}
+
+.wsvl-file-item .progress-bar {
+    height: 15px;
+    background: #f0f0f0;
+    border-radius: 3px;
+    overflow: hidden;
+    margin-bottom: 5px;
+}
+
+.wsvl-file-item .progress {
+    height: 100%;
+    background: #2271b1;
+    width: 0;
+}
+
+.wsvl-file-item .status {
+    font-size: 12px;
+    color: #666;
+}
+
+.wsvl-success {
+    padding: 10px;
+    background: #f0f8ff;
+    border-left: 4px solid #2271b1;
+    margin: 10px 0;
+}
+
+.wsvl-error {
+    padding: 10px;
+    background: #fef1f1;
+    border-left: 4px solid #d63638;
+    margin: 10px 0;
+}
+
+/* Ensure upload button has proper spacing */
+.wsvl-upload-controls {
+    display: flex;
+    align-items: center;
+}
+
+.wsvl-upload-controls .description {
+    margin-left: 10px;
+    color: #666;
+}
+
+/* Product video panel */
+.wsvl-product-video-panel .form-field {
+    margin-bottom: 20px;
+}
+
+.wsvl-product-video-panel label {
+    display: block;
+    font-weight: bold;
+    margin-bottom: 5px;
+}
+
+.wsvl-product-video-panel input[type="text"],
+.wsvl-product-video-panel textarea {
+    width: 100%;
+    max-width: 600px;
+}
+
+.wsvl-current-file {
+    display: inline-block;
+    padding: 5px 10px;
+    background: #f0f0f0;
+    border-radius: 3px;
+    font-family: monospace;
 } 

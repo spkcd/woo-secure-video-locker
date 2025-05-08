@@ -15,6 +15,7 @@
             this.videoUrl = null;
             this.mediaSource = null;
             this.sourceBuffer = null;
+            this.playPromise = null;
 
             this.init();
         }
@@ -30,6 +31,7 @@
             this.video.addEventListener('timeupdate', () => this.checkBuffer());
             this.video.addEventListener('waiting', () => this.handleBuffering());
             this.video.addEventListener('playing', () => this.handlePlaying());
+            this.video.addEventListener('pause', () => this.handlePause());
 
             // Disable right-click
             this.video.addEventListener('contextmenu', (e) => {
@@ -117,6 +119,36 @@
             }
         }
 
+        async togglePlay() {
+            try {
+                if (this.video.paused) {
+                    // If there's a pending play promise, wait for it
+                    if (this.playPromise !== null) {
+                        await this.playPromise;
+                    }
+                    
+                    // Start playing
+                    this.playPromise = this.video.play();
+                    await this.playPromise;
+                    this.isPlaying = true;
+                } else {
+                    // If there's a pending play promise, wait for it
+                    if (this.playPromise !== null) {
+                        await this.playPromise;
+                    }
+                    
+                    // Pause the video
+                    this.video.pause();
+                    this.isPlaying = false;
+                }
+            } catch (error) {
+                console.error('Playback error:', error);
+                this.showMessage(wsvlVideoPlayer.i18n.playError);
+            } finally {
+                this.playPromise = null;
+            }
+        }
+
         handleBuffering() {
             this.isPlaying = false;
             this.showLoading();
@@ -125,6 +157,10 @@
         handlePlaying() {
             this.isPlaying = true;
             this.hideLoading();
+        }
+
+        handlePause() {
+            this.isPlaying = false;
         }
 
         checkBuffer() {
@@ -239,14 +275,6 @@
                 progress.style.background = `linear-gradient(to right, white ${percent}%, rgba(255, 255, 255, 0.3) ${percent}%)`;
                 time.textContent = this.formatTime(this.video.currentTime) + ' / ' + this.formatTime(this.video.duration);
             });
-        }
-
-        togglePlay() {
-            if (this.video.paused) {
-                this.video.play();
-            } else {
-                this.video.pause();
-            }
         }
 
         seek(e) {

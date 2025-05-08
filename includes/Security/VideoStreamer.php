@@ -4,7 +4,7 @@ namespace WSVL\Security;
 class VideoStreamer {
     private const TOKEN_EXPIRY = 3600; // 1 hour in seconds
     private const ALGORITHM = 'sha256';
-    private const CHUNK_SIZE = 1024 * 1024; // 1MB chunks
+    private const CHUNK_SIZE = 512 * 1024; // 512KB chunks (reduced from 1MB)
     private const MAX_CHUNK_SIZE = 1024 * 1024 * 10; // 10MB max chunk size
 
     public function __construct() {
@@ -50,87 +50,216 @@ class VideoStreamer {
     public function handle_video_request() {
         global $wp_query;
         
-        // Check if this is a video request
-        if (!isset($wp_query->query_vars['wsvl_video'])) {
-            return;
-        }
-
-        $video_slug = sanitize_text_field($wp_query->query_vars['wsvl_video']);
-        
-        // Verify the request
-        if (!$this->verify_token($video_slug, $_GET['token'])) {
-            status_header(403);
-            die('Access denied');
-        }
-
-        // Get the video file path
-        $video_path = trailingslashit(WSVL_PRIVATE_VIDEOS_DIR) . $video_slug . '.mp4';
-        
-        if (!file_exists($video_path)) {
-            error_log("Video file not found: " . $video_path);
-            status_header(404);
-            die('Video not found');
-        }
-
-        // Get file size
-        $file_size = filesize($video_path);
-
-        // Handle range requests
-        $start = 0;
-        $end = $file_size - 1;
-        $length = $file_size;
-
-        if (isset($_SERVER['HTTP_RANGE'])) {
-            $range = str_replace('bytes=', '', $_SERVER['HTTP_RANGE']);
-            list($start, $end) = explode('-', $range . '-' . ($file_size - 1));
-            $start = max(0, intval($start));
-            $end = min($file_size - 1, ($end ? intval($end) : $file_size - 1));
-            $length = $end - $start + 1;
+        try {
+            // Check if this is a video request - also check query string for backward compatibility
+            $video_slug = null;
             
-            header('HTTP/1.1 206 Partial Content');
-            header('Content-Range: bytes ' . $start . '-' . $end . '/' . $file_size);
-        }
+            if (isset($wp_query->query_vars['wsvl_video'])) {
+                $video_slug = sanitize_text_field($wp_query->query_vars['wsvl_video']);
+            } elseif (isset($_GET['wsvl_video'])) {
+                // Fallback to query parameter if rewrite rules aren't working
+                $video_slug = sanitize_text_field($_GET['wsvl_video']);
+            }
+            
+            if (empty($video_slug)) {
+                return;
+            }
 
-        // Set proper headers for video streaming
-        header('Content-Type: video/mp4');
-        header('Content-Length: ' . $length);
-        header('Accept-Ranges: bytes');
-        header('Cache-Control: no-cache, must-revalidate');
-        header('Content-Disposition: inline; filename="' . basename($video_path) . '"');
-        header('X-Content-Type-Options: nosniff');
-        
-        // CORS headers to allow video playback
-        header('Access-Control-Allow-Origin: *');
-        header('Access-Control-Allow-Methods: GET, HEAD, OPTIONS');
-        header('Access-Control-Allow-Headers: Range');
-        header('Access-Control-Expose-Headers: Accept-Ranges, Content-Length, Content-Range');
+            // Add debugging info only when WP_DEBUG is enabled
+            if (defined('WP_DEBUG') && WP_DEBUG) {
+                error_log('=================== WSVL Debug Start ===================');
+                error_log('WSVL Debug: Starting video request for slug: ' . $video_slug);
+                error_log('WSVL Debug: Request URI: ' . $_SERVER['REQUEST_URI']);
+                error_log('WSVL Debug: Query vars: ' . print_r($wp_query->query_vars, true));
+                error_log('WSVL Debug: GET params: ' . print_r($_GET, true));
+                error_log('WSVL Debug: SERVER: ' . print_r($_SERVER, true));
+                error_log('WSVL Debug: User logged in: ' . (is_user_logged_in() ? 'Yes' : 'No'));
+                if (is_user_logged_in()) {
+                    error_log('WSVL Debug: User ID: ' . get_current_user_id());
+                }
+            }
+            
+            // Verify the request
+            if (!isset($_GET['token'])) {
+                error_log('WSVL Debug: No token provided');
+                status_header(403);
+                die('Access denied - No token provided');
+            }
 
-        // Stream the video file
-        $handle = fopen($video_path, 'rb');
-        if ($handle === false) {
-            error_log("Could not open video file: " . $video_path);
+            if (!$this->verify_token($video_slug, $_GET['token'])) {
+                error_log('WSVL Debug: Token verification failed');
+                status_header(403);
+                die('Access denied - Invalid token');
+            }
+
+            if (defined('WP_DEBUG') && WP_DEBUG) {
+                error_log('WSVL Debug: Token verified successfully');
+            }
+            
+            // Get the video file path using the helper method
+            $video_path = $this->get_video_path($video_slug);
+            
+            if (defined('WP_DEBUG') && WP_DEBUG) {
+                error_log('WSVL Debug: Looking for video at path: ' . $video_path);
+            }
+            
+            if (!$video_path) {
+                error_log('WSVL Debug: No video path returned from get_video_path');
+                status_header(404);
+                die('Video not found - Invalid path');
+            }
+            
+            if (!file_exists($video_path)) {
+                error_log('WSVL Debug: Video file not found at path: ' . $video_path);
+                status_header(404);
+                die('Video not found - File missing');
+            }
+
+            if (defined('WP_DEBUG') && WP_DEBUG) {
+                error_log('WSVL Debug: Video file found');
+            }
+            
+            // Get file size
+            $file_size = filesize($video_path);
+            if ($file_size === false) {
+                error_log('WSVL Debug: Could not get file size');
+                status_header(500);
+                die('Server error - Could not get file size');
+            }
+            
+            if (defined('WP_DEBUG') && WP_DEBUG) {
+                error_log('WSVL Debug: Video file size: ' . $file_size . ' bytes');
+            }
+
+            // Handle range requests
+            $start = 0;
+            $end = $file_size - 1;
+            $length = $file_size;
+
+            if (isset($_SERVER['HTTP_RANGE'])) {
+                if (defined('WP_DEBUG') && WP_DEBUG) {
+                    error_log('WSVL Debug: Range request detected: ' . $_SERVER['HTTP_RANGE']);
+                }
+                $range = str_replace('bytes=', '', $_SERVER['HTTP_RANGE']);
+                list($start, $end) = explode('-', $range . '-' . ($file_size - 1));
+                $start = max(0, intval($start));
+                $end = min($file_size - 1, ($end ? intval($end) : $file_size - 1));
+                $length = $end - $start + 1;
+                
+                header('HTTP/1.1 206 Partial Content');
+                header('Content-Range: bytes ' . $start . '-' . $end . '/' . $file_size);
+            }
+
+            // Get mime type
+            $mime_type = 'video/mp4';
+            $extension = strtolower(pathinfo($video_path, PATHINFO_EXTENSION));
+            
+            // Map common video extensions to MIME types
+            $mime_types = [
+                'mp4' => 'video/mp4',
+                'webm' => 'video/webm',
+                'ogg' => 'video/ogg',
+                'ogv' => 'video/ogg',
+                'm4v' => 'video/mp4',
+                'mov' => 'video/quicktime'
+            ];
+            
+            if (isset($mime_types[$extension])) {
+                $mime_type = $mime_types[$extension];
+            }
+
+            if (defined('WP_DEBUG') && WP_DEBUG) {
+                error_log('WSVL Debug: Setting mime type: ' . $mime_type);
+            }
+
+            // Performance tuning headers
+            header('X-Accel-Buffering: no'); // Disable Nginx buffering
+            header('X-Content-Duration: ' . $file_size); // Hint for browsers
+            
+            // Set proper headers for video streaming
+            header('Content-Type: ' . $mime_type);
+            header('Content-Length: ' . $length);
+            header('Accept-Ranges: bytes');
+            header('Cache-Control: max-age=3600, public'); // Allow caching for 1 hour
+            header('Content-Disposition: inline; filename="' . basename($video_path) . '"');
+            header('X-Content-Type-Options: nosniff');
+            
+            // CORS headers to allow video playback - use the actual domain
+            $site_url = parse_url(site_url(), PHP_URL_HOST);
+            header('Access-Control-Allow-Origin: *');
+            header('Access-Control-Allow-Methods: GET, HEAD, OPTIONS');
+            header('Access-Control-Allow-Headers: Range, Origin, X-Requested-With');
+            header('Access-Control-Expose-Headers: Accept-Ranges, Content-Length, Content-Range');
+            
+            if (defined('WP_DEBUG') && WP_DEBUG) {
+                error_log('WSVL Debug: Streaming headers set, ready to stream file');
+            }
+
+            // Disable output buffering
+            while (ob_get_level()) {
+                ob_end_clean();
+            }
+            
+            // Optimize streaming based on range requests
+            if ($start > 0 || $end < $file_size - 1) {
+                // For range requests, we'll use fopen/fread for precise streaming
+                $handle = fopen($video_path, 'rb');
+                if ($handle === false) {
+                    error_log('WSVL Debug: Failed to open video file');
+                    status_header(500);
+                    die('Server error - Could not open file');
+                }
+                
+                if (fseek($handle, $start) === -1) {
+                    fclose($handle);
+                    error_log('WSVL Debug: Failed to seek to position');
+                    status_header(500);
+                    die('Server error - Could not seek to position');
+                }
+                
+                // Stream the range
+                $buffer_size = self::CHUNK_SIZE; // Use optimized chunk size 
+                $bytes_sent = 0;
+                
+                while (!feof($handle) && $bytes_sent < $length) {
+                    // Calculate remaining bytes
+                    $remaining = $length - $bytes_sent;
+                    $read_size = min($buffer_size, $remaining);
+                    
+                    // Read and output chunk
+                    $buffer = fread($handle, $read_size);
+                    if ($buffer === false) {
+                        break;
+                    }
+                    
+                    echo $buffer;
+                    flush();
+                    
+                    $bytes_sent += strlen($buffer);
+                    
+                    // Free memory
+                    unset($buffer);
+                }
+                
+                fclose($handle);
+            } else {
+                // For full file requests, use readfile which is more efficient
+                readfile($video_path);
+            }
+            
+            if (defined('WP_DEBUG') && WP_DEBUG) {
+                error_log('WSVL Debug: Finished streaming video');
+                error_log('=================== WSVL Debug End ===================');
+            }
+            
+            exit;
+            
+        } catch (\Exception $e) {
+            error_log('WSVL Debug: Exception in handle_video_request: ' . $e->getMessage());
+            error_log('WSVL Debug: Exception trace: ' . $e->getTraceAsString());
             status_header(500);
-            die('Server error');
+            die('Server error - ' . $e->getMessage());
         }
-
-        // Seek to start position for range requests
-        if ($start > 0) {
-            fseek($handle, $start);
-        }
-
-        // Stream in chunks to prevent memory issues
-        $buffer_size = 8192; // 8KB chunks
-        $bytes_sent = 0;
-
-        while (!feof($handle) && $bytes_sent < $length) {
-            $buffer = fread($handle, min($buffer_size, $length - $bytes_sent));
-            echo $buffer;
-            flush();
-            $bytes_sent += strlen($buffer);
-        }
-
-        fclose($handle);
-        exit;
     }
 
     public function ajax_stream_video() {
@@ -175,13 +304,13 @@ class VideoStreamer {
         $expiry = time() + (24 * 60 * 60);
 
         // Build the URL with all security parameters
+        $url = site_url('/secure-videos/' . $video_slug . '/');
         $url = add_query_arg(array(
-            'wsvl_video' => $video_slug,
             'token' => $token,
             '_wpnonce' => wp_create_nonce('wsvl_video_' . $video_slug),
             '_sid' => $hashed_session,
             '_t' => $expiry
-        ), site_url('/'));
+        ), $url);
 
         error_log('VideoStreamer: Generated URL for ' . $video_slug);
         error_log('VideoStreamer: Session ID: ' . $hashed_session);
@@ -263,12 +392,12 @@ class VideoStreamer {
                 error_log('VideoStreamer: Provided _sid: ' . $_REQUEST['_sid']);
             }
 
-            // Find the product with this video slug
+            // Find the product with this video slug (case-insensitive)
             global $wpdb;
             $product_id = $wpdb->get_var($wpdb->prepare(
                 "SELECT post_id FROM {$wpdb->postmeta} 
                 WHERE meta_key = %s 
-                AND meta_value = %s 
+                AND LOWER(meta_value) = LOWER(%s)
                 AND post_id IN (
                     SELECT ID FROM {$wpdb->posts} 
                     WHERE post_type = %s 
@@ -291,27 +420,59 @@ class VideoStreamer {
             $video_file = get_post_meta($product_id, '_video_file', true);
             error_log('VideoStreamer: Video file from meta: ' . ($video_file ? $video_file : 'None'));
 
-            if (!$video_file) {
-                error_log('VideoStreamer: No video file found for product: ' . $product_id);
-                return false;
+            if (empty($video_file)) {
+                // Try to find the video file by looking for files with a matching slug
+                error_log('VideoStreamer: Attempting to find video file by slug pattern matching');
+                $video_path = $this->find_video_by_slug_pattern($video_slug);
+                if ($video_path) {
+                    $filename = basename($video_path);
+                    error_log('VideoStreamer: Found video file by pattern matching: ' . $filename);
+                    
+                    // Update the product meta with the found filename
+                    update_post_meta($product_id, '_video_file', $filename);
+                    $video_file = $filename;
+                    error_log('VideoStreamer: Updated product meta with found filename: ' . $filename);
+                } else {
+                    error_log('VideoStreamer: No video file found for product: ' . $product_id);
+                    return false;
+                }
             }
 
+            // Try both original case and lowercase versions of the file
             $video_path = WSVL_PRIVATE_VIDEOS_DIR . $video_file;
-            error_log('VideoStreamer: Full video path: ' . $video_path);
+            $video_path_lower = WSVL_PRIVATE_VIDEOS_DIR . strtolower($video_file);
             
-            if (!file_exists($video_path)) {
-                error_log('VideoStreamer: Video file not found at path: ' . $video_path);
+            error_log('VideoStreamer: Checking paths:');
+            error_log('- Original: ' . $video_path);
+            error_log('- Lowercase: ' . $video_path_lower);
+            
+            // Check both paths
+            if (!file_exists($video_path) && !file_exists($video_path_lower)) {
+                error_log('VideoStreamer: Video file not found at either path');
                 error_log('VideoStreamer: Directory exists: ' . (is_dir(dirname($video_path)) ? 'Yes' : 'No'));
                 if (is_dir(dirname($video_path))) {
                     error_log('VideoStreamer: Directory contents: ' . print_r(scandir(dirname($video_path)), true));
                 }
-                return false;
+                
+                // Try to find the file by slug pattern matching
+                $alternative_path = $this->find_video_by_slug_pattern($video_slug);
+                if ($alternative_path) {
+                    error_log('VideoStreamer: Found alternative video path: ' . $alternative_path);
+                    $final_path = $alternative_path;
+                } else {
+                    return false;
+                }
+            } else {
+                // Use the path that exists
+                $final_path = file_exists($video_path) ? $video_path : $video_path_lower;
             }
+            
+            error_log('VideoStreamer: Using path: ' . $final_path);
 
             // Verify file permissions
-            if (!is_readable($video_path)) {
-                error_log('VideoStreamer: Video file is not readable: ' . $video_path);
-                error_log('VideoStreamer: File permissions: ' . substr(sprintf('%o', fileperms($video_path)), -4));
+            if (!is_readable($final_path)) {
+                error_log('VideoStreamer: Video file is not readable: ' . $final_path);
+                error_log('VideoStreamer: File permissions: ' . substr(sprintf('%o', fileperms($final_path)), -4));
                 return false;
             }
 
@@ -344,7 +505,7 @@ class VideoStreamer {
                 $product_id = $item->get_product_id();
                 $product_video_slug = get_post_meta($product_id, '_video_slug', true);
                 error_log('VideoStreamer: Checking product ' . $product_id . ' with video slug: ' . $product_video_slug);
-                if ($product_video_slug === $video_slug) {
+                if (strtolower($product_video_slug) === strtolower($video_slug)) {
                     $has_access = true;
                     error_log('VideoStreamer: Found matching product with access');
                     break 2;
@@ -365,7 +526,7 @@ class VideoStreamer {
                     $product_id = $item->get_product_id();
                     $product_video_slug = get_post_meta($product_id, '_video_slug', true);
                     error_log('VideoStreamer: Checking subscription product ' . $product_id . ' with video slug: ' . $product_video_slug);
-                    if ($product_video_slug === $video_slug) {
+                    if (strtolower($product_video_slug) === strtolower($video_slug)) {
                         $has_access = true;
                         error_log('VideoStreamer: Found matching subscription with access');
                         break 2;
@@ -691,109 +852,184 @@ class VideoStreamer {
     }
 
     private function get_video_path($video_slug) {
-        global $wpdb;
-        
-        // Debug logging
-        if (defined('WP_DEBUG') && WP_DEBUG) {
-            error_log('VideoStreamer: Looking for video with slug: ' . $video_slug);
-            error_log('VideoStreamer: WordPress content directory: ' . WP_CONTENT_DIR);
-            error_log('VideoStreamer: WordPress root directory: ' . ABSPATH);
-            error_log('VideoStreamer: Server document root: ' . $_SERVER['DOCUMENT_ROOT']);
-        }
-        
-        $product_id = $wpdb->get_var($wpdb->prepare(
-            "SELECT post_id FROM {$wpdb->postmeta} 
-            WHERE meta_key = %s 
-            AND meta_value = %s 
-            AND post_id IN (
-                SELECT ID FROM {$wpdb->posts} 
-                WHERE post_type = %s 
-                AND post_status = %s
-            ) 
-            LIMIT 1",
-            '_video_slug',
-            $video_slug,
-            'product',
-            'publish'
-        ));
-
-        if (!$product_id) {
-            if (defined('WP_DEBUG') && WP_DEBUG) {
-                error_log('VideoStreamer: No product found for video slug: ' . $video_slug);
-                error_log('VideoStreamer: SQL Query: ' . $wpdb->last_query);
-            }
-            return false;
-        }
-
-        $video_file = get_post_meta($product_id, '_video_file', true);
-        if (!$video_file) {
-            if (defined('WP_DEBUG') && WP_DEBUG) {
-                error_log('VideoStreamer: No video file found for product ID: ' . $product_id);
-            }
-            return false;
-        }
-
-        // Ensure we have a clean path
-        $video_file = basename($video_file); // Strip any path components for security
-        
-        // Try multiple path variations
-        $possible_paths = [
-            // Try absolute path from document root
-            rtrim($_SERVER['DOCUMENT_ROOT'], '/') . '/wp-content/private-videos/' . $video_file,
-            // Try WordPress absolute path
-            rtrim(ABSPATH, '/') . '/wp-content/private-videos/' . $video_file,
-            // Try WordPress content directory
-            rtrim(WP_CONTENT_DIR, '/') . '/private-videos/' . $video_file,
-            // Try plugin's defined path
-            rtrim(WSVL_PRIVATE_VIDEOS_DIR, '/') . '/' . $video_file
-        ];
-        
-        if (defined('WP_DEBUG') && WP_DEBUG) {
-            error_log('VideoStreamer: Checking possible paths:');
-            foreach ($possible_paths as $index => $path) {
-                error_log(sprintf('Path %d: %s (Exists: %s, Readable: %s)', 
-                    $index + 1, 
-                    $path, 
-                    file_exists($path) ? 'Yes' : 'No',
-                    (file_exists($path) && is_readable($path)) ? 'Yes' : 'No'
-                ));
+        try {
+            error_log('WSVL Debug: Getting video path for slug: ' . $video_slug);
+            
+            // FIRST METHOD: Try to find the file using the product meta approach
+            global $wpdb;
+            $product_id = $wpdb->get_var($wpdb->prepare(
+                "SELECT post_id FROM {$wpdb->postmeta} 
+                WHERE meta_key = %s 
+                AND LOWER(meta_value) = LOWER(%s)
+                AND post_id IN (
+                    SELECT ID FROM {$wpdb->posts} 
+                    WHERE post_type = %s 
+                    AND post_status = %s
+                ) 
+                LIMIT 1",
+                '_video_slug',
+                $video_slug,
+                'product',
+                'publish'
+            ));
+            
+            error_log('WSVL Debug: Product ID from meta query: ' . ($product_id ? $product_id : 'Not found'));
+            
+            if ($product_id) {
+                $video_file = get_post_meta($product_id, '_video_file', true);
+                error_log('WSVL Debug: Video file from meta: ' . ($video_file ? $video_file : 'Not found'));
                 
-                if (file_exists($path)) {
-                    error_log(sprintf('File details for %s:', $path));
-                    error_log('- Size: ' . filesize($path));
-                    error_log('- Permissions: ' . substr(sprintf('%o', fileperms($path)), -4));
-                    error_log('- Owner: ' . fileowner($path));
-                    error_log('- Group: ' . filegroup($path));
+                if ($video_file) {
+                    // Try both original case and lowercase versions of the file
+                    $video_path = WSVL_PRIVATE_VIDEOS_DIR . $video_file;
+                    $video_path_lower = WSVL_PRIVATE_VIDEOS_DIR . strtolower($video_file);
+                    
+                    error_log('WSVL Debug: Checking file existence - Original: ' . $video_path);
+                    error_log('WSVL Debug: Checking file existence - Lowercase: ' . $video_path_lower);
+                    
+                    if (file_exists($video_path)) {
+                        error_log('WSVL Debug: Found original case file');
+                        return $video_path;
+                    } else if (file_exists($video_path_lower)) {
+                        error_log('WSVL Debug: Found lowercase file');
+                        return $video_path_lower;
+                    }
+                }
+                
+                // Try to find the video by pattern matching
+                $pattern_match_path = $this->find_video_by_slug_pattern($video_slug);
+                if ($pattern_match_path) {
+                    error_log('WSVL Debug: Found video by pattern matching: ' . $pattern_match_path);
+                    
+                    // Update the product meta with the found filename
+                    $filename = basename($pattern_match_path);
+                    update_post_meta($product_id, '_video_file', $filename);
+                    error_log('WSVL Debug: Updated product meta with found filename: ' . $filename);
+                    
+                    return $pattern_match_path;
                 }
             }
             
-            // Log directory existence and permissions
-            foreach (array_unique(array_map('dirname', $possible_paths)) as $dir) {
-                error_log(sprintf('Directory %s: (Exists: %s, Readable: %s)', 
-                    $dir,
-                    is_dir($dir) ? 'Yes' : 'No',
-                    (is_dir($dir) && is_readable($dir)) ? 'Yes' : 'No'
-                ));
-                if (is_dir($dir)) {
-                    error_log('Directory contents: ' . print_r(scandir($dir), true));
+            // SECOND METHOD: Try to find the file directly in the upload directory
+            // Get the upload directory
+            $upload_dir = wp_upload_dir();
+            $base_dir = $upload_dir['basedir'];
+            $video_dir = $base_dir . '/secure-videos';
+            
+            error_log('WSVL Debug: Base upload directory: ' . $base_dir);
+            error_log('WSVL Debug: Video directory: ' . $video_dir);
+            
+            // Check if video directory exists
+            if (!file_exists($video_dir)) {
+                error_log('WSVL Debug: Video directory does not exist');
+            } else {
+                // Get all files in the video directory
+                $files = scandir($video_dir);
+                error_log('WSVL Debug: Files in video directory: ' . print_r($files, true));
+                
+                // Look for the video file (case insensitive)
+                foreach ($files as $file) {
+                    if ($file === '.' || $file === '..') {
+                        continue;
+                    }
+                    
+                    // Check if this is the video we're looking for (case insensitive)
+                    if (stripos($file, $video_slug) === 0) {
+                        $video_path = $video_dir . '/' . $file;
+                        error_log('WSVL Debug: Found matching video file: ' . $video_path);
+                        
+                        // Verify the file exists and is readable
+                        if (!is_file($video_path)) {
+                            error_log('WSVL Debug: Found path is not a file');
+                            continue;
+                        }
+                        
+                        if (!is_readable($video_path)) {
+                            error_log('WSVL Debug: Found file is not readable');
+                            continue;
+                        }
+                        
+                        // Update product meta if we have a product ID
+                        if ($product_id) {
+                            update_post_meta($product_id, '_video_file', $file);
+                            error_log('WSVL Debug: Updated product meta with found file: ' . $file);
+                        }
+                        
+                        return $video_path;
+                    }
                 }
             }
-        }
-        
-        // Try each path
-        foreach ($possible_paths as $path) {
-            if (file_exists($path) && is_readable($path)) {
-                if (defined('WP_DEBUG') && WP_DEBUG) {
-                    error_log('VideoStreamer: Using valid path: ' . $path);
+            
+            // FALLBACK: Try looking in the private videos directory (WSVL_PRIVATE_VIDEOS_DIR)
+            error_log('WSVL Debug: Trying fallback in WSVL_PRIVATE_VIDEOS_DIR: ' . WSVL_PRIVATE_VIDEOS_DIR);
+            
+            // Try pattern matching (includes checking WSVL_PRIVATE_VIDEOS_DIR)
+            $pattern_match_path = $this->find_video_by_slug_pattern($video_slug);
+            if ($pattern_match_path) {
+                error_log('WSVL Debug: Found video by pattern matching: ' . $pattern_match_path);
+                
+                // Update the product meta if we have a product ID
+                if ($product_id) {
+                    $filename = basename($pattern_match_path);
+                    update_post_meta($product_id, '_video_file', $filename);
+                    error_log('WSVL Debug: Updated product meta with found filename: ' . $filename);
                 }
-                return $path;
+                
+                return $pattern_match_path;
             }
+            
+            error_log('WSVL Debug: No matching video file found in any location');
+            return false;
+            
+        } catch (\Exception $e) {
+            error_log('WSVL Debug: Exception in get_video_path: ' . $e->getMessage());
+            error_log('WSVL Debug: Exception trace: ' . $e->getTraceAsString());
+            return false;
         }
-        
-        if (defined('WP_DEBUG') && WP_DEBUG) {
-            error_log('VideoStreamer: No valid path found for video file: ' . $video_file);
-        }
+    }
 
+    /**
+     * Find a video file in the private directory by matching slug pattern
+     * @param string $video_slug The video slug to match
+     * @return string|false The full path to the video file or false if not found
+     */
+    private function find_video_by_slug_pattern($video_slug) {
+        error_log('VideoStreamer: Searching for video with slug pattern: ' . $video_slug);
+        
+        if (!is_dir(WSVL_PRIVATE_VIDEOS_DIR)) {
+            error_log('VideoStreamer: Private videos directory does not exist: ' . WSVL_PRIVATE_VIDEOS_DIR);
+            return false;
+        }
+        
+        $files = scandir(WSVL_PRIVATE_VIDEOS_DIR);
+        error_log('VideoStreamer: Found ' . count($files) . ' files in directory');
+        
+        foreach ($files as $file) {
+            if ($file === '.' || $file === '..') {
+                continue;
+            }
+            
+            // Check for exact match (case insensitive)
+            if (strcasecmp($file, $video_slug . '.mp4') === 0 || 
+                strcasecmp($file, $video_slug . '.webm') === 0 || 
+                strcasecmp($file, $video_slug . '.m4v') === 0 ||
+                strcasecmp($file, $video_slug . '.mov') === 0 ||
+                strcasecmp($file, $video_slug . '.ogv') === 0) {
+                return WSVL_PRIVATE_VIDEOS_DIR . $file;
+            }
+            
+            // Check if file starts with the slug (case insensitive)
+            if (stripos($file, $video_slug) === 0) {
+                return WSVL_PRIVATE_VIDEOS_DIR . $file;
+            }
+            
+            // Check if file contains the slug (case insensitive)
+            if (stripos($file, $video_slug) !== false) {
+                return WSVL_PRIVATE_VIDEOS_DIR . $file;
+            }
+        }
+        
+        error_log('VideoStreamer: No matching file found for slug: ' . $video_slug);
         return false;
     }
 } 

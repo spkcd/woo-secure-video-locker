@@ -48,96 +48,66 @@
     border-radius: 5px;
 }
 
-/* Canvas styles */
-#wsvl-video-canvas {
+/* Video.js customizations */
+.video-js {
     position: absolute;
     top: 0;
     left: 0;
     width: 100%;
     height: 100%;
-    background: #000;
 }
 
-/* Video controls */
-.wsvl-video-controls {
+/* Custom Video.js theme overrides */
+.video-js .vjs-big-play-button {
+    background-color: rgba(0, 0, 0, 0.6);
+    border-color: #fff;
+    border-radius: 50%;
+    width: 80px;
+    height: 80px;
+    line-height: 80px;
+    margin-left: -40px;
+    margin-top: -40px;
+}
+
+.video-js:hover .vjs-big-play-button {
+    background-color: rgba(0, 0, 0, 0.8);
+    border-color: #fff;
+}
+
+.video-js .vjs-control-bar {
+    background-color: rgba(0, 0, 0, 0.7);
+}
+
+.video-js .vjs-progress-control {
     position: absolute;
-    bottom: 0;
-    left: 0;
+    top: -10px;
     right: 0;
-    background: rgba(0, 0, 0, 0.7);
-    padding: 10px;
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    opacity: 0;
-    transition: opacity 0.3s ease;
-    z-index: 30;
-}
-
-.wsvl-video-wrapper:hover .wsvl-video-controls {
-    opacity: 1;
-}
-
-.wsvl-video-controls button {
-    background: none;
-    border: none;
-    color: white;
-    cursor: pointer;
-    padding: 5px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    z-index: 35;
-}
-
-.wsvl-video-controls button:hover {
-    color: #ddd;
-}
-
-.wsvl-progress-bar {
-    flex: 1;
-    height: 4px;
-    background: rgba(255, 255, 255, 0.3);
-    cursor: pointer;
-    position: relative;
-    z-index: 35;
-}
-
-.wsvl-progress {
-    position: absolute;
-    top: 0;
     left: 0;
-    height: 100%;
-    background: white;
-    width: 0;
-}
-
-.wsvl-time {
-    color: white;
-    font-size: 14px;
-    min-width: 100px;
-    text-align: center;
-    z-index: 35;
-}
-
-.wsvl-volume-slider {
-    width: 60px;
-    height: 4px;
-    background: rgba(255, 255, 255, 0.3);
-    cursor: pointer;
-    position: relative;
-    z-index: 35;
-}
-
-.wsvl-volume-progress {
-    position: absolute;
-    top: 0;
-    left: 0;
-    height: 100%;
-    background: white;
     width: 100%;
+    height: 10px;
 }
 
+.video-js .vjs-progress-holder {
+    height: 10px;
+}
+
+.video-js .vjs-progress-holder .vjs-play-progress {
+    background-color: #fff;
+}
+
+.video-js .vjs-progress-holder .vjs-progress-holder {
+    background-color: rgba(255, 255, 255, 0.3);
+}
+
+.video-js .vjs-progress-holder:hover .vjs-progress-holder {
+    height: 10px;
+}
+
+.video-js .vjs-progress-holder:hover .vjs-play-progress {
+    background-color: #fff;
+}
+
+/* Video description */
 .wsvl-video-description {
     margin-top: 15px;
     padding: 15px;
