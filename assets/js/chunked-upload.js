@@ -196,14 +196,39 @@
                     '<span style="color:green">✓ Upload complete!</span>'
                 );
                 
-                // Add the file details to the form
+                // Add the file details to the form - trigger change to ensure WooCommerce captures it
                 if ($('#wsvl-video-file').length) {
-                    $('#wsvl-video-file').val(response.data.file);
+                    $('#wsvl-video-file').val(response.data.file).trigger('change');
+                    console.log('Video file set to:', response.data.file);
+                    
+                    // Also set a hidden field directly in the form
+                    if ($('input[name="_video_file"]').length) {
+                        $('input[name="_video_file"]').val(response.data.file);
+                    } else {
+                        $('<input>').attr({
+                            type: 'hidden',
+                            name: '_video_file',
+                            value: response.data.file
+                        }).appendTo('#post');
+                    }
                 }
                 
-                // Auto-fill the slug field if available
+                // Auto-fill the slug field if available - trigger change to ensure WooCommerce captures it
                 if (response.data.slug && $('#wsvl-video-slug').length) {
-                    $('#wsvl-video-slug').val(response.data.slug);
+                    $('#wsvl-video-slug').val(response.data.slug).trigger('change');
+                    console.log('Video slug set to:', response.data.slug);
+                    
+                    // Also set a hidden field directly in the form
+                    if ($('input[name="_video_slug"]').length) {
+                        $('input[name="_video_slug"]').val(response.data.slug);
+                    } else {
+                        $('<input>').attr({
+                            type: 'hidden',
+                            name: '_video_slug',
+                            value: response.data.slug
+                        }).appendTo('#post');
+                    }
+                    
                     // Add visual feedback that the slug was auto-filled
                     $('#wsvl-video-slug').css({
                         'background-color': '#f0fff0',
@@ -216,7 +241,7 @@
                 
                 // Show a success message
                 let message = '<div class="wsvl-success">' +
-                    '<p>Video successfully uploaded! You can now save the product.</p>' +
+                    '<p>Video successfully uploaded! <strong>Please save the product to preserve these changes.</strong></p>' +
                     '<p>Filename: ' + response.data.file + '</p>';
                 
                 // Add slug info to the success message

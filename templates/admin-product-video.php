@@ -13,12 +13,15 @@ if (!defined('ABSPATH')) {
 $video_file = get_post_meta($post_id, '_video_file', true);
 $video_slug = get_post_meta($post_id, '_video_slug', true);
 $video_description = get_post_meta($post_id, '_video_description', true);
+
+// Ensure we have a nonce field for WooCommerce
+wp_nonce_field('wsvl_save_video_data', 'wsvl_video_nonce');
 ?>
 
 <div class="wsvl-product-video-panel">
     <p class="form-field">
         <label for="wsvl-video-slug"><?php _e('Video Slug', 'secure-video-locker-for-woocommerce'); ?></label>
-        <input type="text" id="wsvl-video-slug" name="_video_slug" value="<?php echo esc_attr($video_slug); ?>" />
+        <input type="text" id="wsvl-video-slug" name="_video_slug" value="<?php echo esc_attr($video_slug); ?>" class="wsvl-field" />
         <span class="description">
             <?php _e('A unique identifier for this video. Will be auto-generated when you upload a video file.', 'secure-video-locker-for-woocommerce'); ?>
             <?php _e('Use only letters, numbers, and hyphens.', 'secure-video-locker-for-woocommerce'); ?>
@@ -27,7 +30,7 @@ $video_description = get_post_meta($post_id, '_video_description', true);
     
     <p class="form-field">
         <label for="wsvl-video-description"><?php _e('Video Description', 'secure-video-locker-for-woocommerce'); ?></label>
-        <textarea id="wsvl-video-description" name="_video_description" rows="4"><?php echo esc_textarea($video_description); ?></textarea>
+        <textarea id="wsvl-video-description" name="_video_description" rows="4" class="wsvl-field"><?php echo esc_textarea($video_description); ?></textarea>
         <span class="description"><?php _e('A short description to display with the video.', 'secure-video-locker-for-woocommerce'); ?></span>
     </p>
     
@@ -49,7 +52,7 @@ $video_description = get_post_meta($post_id, '_video_description', true);
         <label><?php _e('Upload Video', 'secure-video-locker-for-woocommerce'); ?></label>
         
         <!-- Hidden field to store the filename -->
-        <input type="hidden" id="wsvl-video-file" name="_video_file" value="<?php echo esc_attr($video_file); ?>" />
+        <input type="hidden" id="wsvl-video-file" name="_video_file" value="<?php echo esc_attr($video_file); ?>" class="wsvl-field" />
         
         <!-- Chunked uploader container -->
         <div id="wsvl-chunked-uploader" class="wsvl-uploader">
@@ -67,6 +70,37 @@ $video_description = get_post_meta($post_id, '_video_description', true);
         <p class="description"><strong><?php _e('Note:', 'secure-video-locker-for-woocommerce'); ?></strong> <?php _e('When upload is complete, the Video Slug will be automatically generated from the filename.', 'secure-video-locker-for-woocommerce'); ?></p>
     </div>
 </div>
+
+<script type="text/javascript">
+jQuery(document).ready(function($) {
+    // Ensure our fields are included when WooCommerce submits the form
+    $('#post').on('submit', function() {
+        var slugField = $('#wsvl-video-slug');
+        var fileField = $('#wsvl-video-file');
+        
+        // Log current values for debugging
+        console.log('Submitting form with video slug: ' + slugField.val());
+        console.log('Submitting form with video file: ' + fileField.val());
+        
+        // Ensure fields are included by copying values if needed
+        if (!$('input[name="_video_slug"]').length || $('input[name="_video_slug"]').val() === '') {
+            $('<input>').attr({
+                type: 'hidden',
+                name: '_video_slug',
+                value: slugField.val()
+            }).appendTo('#post');
+        }
+        
+        if (!$('input[name="_video_file"]').length || $('input[name="_video_file"]').val() === '') {
+            $('<input>').attr({
+                type: 'hidden',
+                name: '_video_file',
+                value: fileField.val()
+            }).appendTo('#post');
+        }
+    });
+});
+</script>
 
 <style>
 .wsvl-product-video-panel .form-field {

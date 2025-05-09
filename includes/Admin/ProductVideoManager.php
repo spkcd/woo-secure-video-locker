@@ -81,19 +81,107 @@ class ProductVideoManager {
             // Include our custom template instead of using the WooCommerce field builder
             include WSVL_PLUGIN_DIR . 'templates/admin-product-video.php';
             ?>
+            <script type="text/javascript">
+            jQuery(document).ready(function($) {
+                // Ensure our fields are preserved when switching tabs
+                const videoSlugField = $('#wsvl-video-slug');
+                const videoFileField = $('#wsvl-video-file');
+                
+                // When users click on any tab, store current values
+                $('.product_data_tabs .product_data_tab').on('click', function() {
+                    // Store the current values in data attributes
+                    videoSlugField.attr('data-last-value', videoSlugField.val());
+                    videoFileField.attr('data-last-value', videoFileField.val());
+                });
+                
+                // When our tab is clicked, check if values were lost and restore them
+                $('.product_data_tabs .product_data_tab a[href="#video_product_data"]').on('click', function() {
+                    // Check if values were lost (they're empty but we have stored values)
+                    const storedSlug = videoSlugField.attr('data-last-value');
+                    const storedFile = videoFileField.attr('data-last-value');
+                    
+                    if (storedSlug && !videoSlugField.val()) {
+                        console.log('Restoring lost slug value:', storedSlug);
+                        videoSlugField.val(storedSlug);
+                    }
+                    
+                    if (storedFile && !videoFileField.val()) {
+                        console.log('Restoring lost file value:', storedFile);
+                        videoFileField.val(storedFile);
+                    }
+                });
+                
+                // Also store values before form submission
+                $('#post').on('submit', function() {
+                    // Log the values being submitted
+                    console.log('Form submission - Video slug:', videoSlugField.val());
+                    console.log('Form submission - Video file:', videoFileField.val());
+                });
+            });
+            </script>
         </div>
         <?php
     }
 
     public function save_video_data($post_id) {
+        // Debug: Log the post data to see what's being received
+        error_log('WSVL - Processing product meta for post ID: ' . $post_id);
+        
+        // Security check: Verify our nonce if present, but don't fail if it's missing
+        // (since it might be coming from a WooCommerce form submission without our nonce)
+        if (isset($_POST['wsvl_video_nonce']) && !wp_verify_nonce($_POST['wsvl_video_nonce'], 'wsvl_save_video_data')) {
+            error_log('WSVL - Nonce verification failed but continuing anyway');
+            // Continue anyway since it might be a WooCommerce save
+        }
+        
+        // Don't save during autosave
+        if (defined('DOING_AUTOSAVE') && DOING_AUTOSAVE) {
+            error_log('WSVL - Skipping save during autosave');
+            return;
+        }
+        
+        // Check user permissions
+        if (!current_user_can('edit_post', $post_id)) {
+            error_log('WSVL - User does not have permission to edit this post');
+            return;
+        }
+        
+        // Log all POST keys for debugging
+        error_log('WSVL - POST keys: ' . implode(', ', array_keys($_POST)));
+        
         // Unslash and sanitize input
-        $video_slug = sanitize_text_field(wp_unslash($_POST['_video_slug'] ?? ''));
-        $video_description = sanitize_textarea_field(wp_unslash($_POST['_video_description'] ?? ''));
-        $video_file = sanitize_text_field(wp_unslash($_POST['_video_file'] ?? ''));
+        $video_slug = !empty($_POST['_video_slug']) ? sanitize_text_field(wp_unslash($_POST['_video_slug'])) : '';
+        $video_description = !empty($_POST['_video_description']) ? sanitize_textarea_field(wp_unslash($_POST['_video_description'])) : '';
+        $video_file = !empty($_POST['_video_file']) ? sanitize_text_field(wp_unslash($_POST['_video_file'])) : '';
+        
+        error_log('WSVL - Processed fields - Slug: ' . $video_slug . ', File: ' . $video_file);
 
-        update_post_meta($post_id, '_video_slug', $video_slug);
-        update_post_meta($post_id, '_video_description', $video_description);
-        update_post_meta($post_id, '_video_file', $video_file);
+        // If both are empty, check if we have existing data to preserve
+        if (empty($video_slug) && empty($video_file)) {
+            $existing_slug = get_post_meta($post_id, '_video_slug', true);
+            $existing_file = get_post_meta($post_id, '_video_file', true);
+            
+            if ($existing_slug || $existing_file) {
+                error_log('WSVL - Empty fields but existing data found. Not updating to prevent data loss.');
+                return;
+            }
+        }
+
+        // Update post meta - only update if we actually have values
+        if (!empty($video_slug)) {
+            update_post_meta($post_id, '_video_slug', $video_slug);
+            error_log('WSVL - Updated _video_slug meta to: ' . $video_slug);
+        }
+        
+        if (!empty($video_description)) {
+            update_post_meta($post_id, '_video_description', $video_description);
+            error_log('WSVL - Updated _video_description meta');
+        }
+        
+        if (!empty($video_file)) {
+            update_post_meta($post_id, '_video_file', $video_file);
+            error_log('WSVL - Updated _video_file meta to: ' . $video_file);
+        }
     }
 
     public function display_video_preview() {
