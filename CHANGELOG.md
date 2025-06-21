@@ -7,6 +7,43 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.1.0] - 2025-01-20
+
+### Added - Video Analytics & Monitoring System
+- **Comprehensive Video Analytics Dashboard**: New admin interface under WooCommerce → Video Analytics
+- **Automatic View Tracking**: Every video stream is now automatically recorded with detailed metrics
+- **Database Tables**: Two new tables for detailed view records and summary statistics
+  - `wp_wsvl_video_views`: Individual view records with user, device, and session data
+  - `wp_wsvl_video_stats`: Aggregated statistics for fast queries
+- **Interactive Charts**: Visual analytics with Chart.js integration
+  - Top 10 most watched videos bar chart
+  - Views over time line chart
+- **Detailed Statistics**: Track views, unique viewers, watch time, and completion rates
+- **Device & Browser Analytics**: Automatic detection and tracking of user devices and browsers
+- **CSV Export**: Export analytics data for external analysis
+- **Frontend Shortcodes**: Display video statistics on any page or post
+  - `[wsvl_video_views slug="video-slug"]` - Simple view count
+  - `[wsvl_video_stats slug="video-slug"]` - Comprehensive statistics
+- **Product Page Integration**: Automatic display of video stats on WooCommerce product pages
+- **Template Functions**: PHP functions for theme developers
+- **Real-time Data**: Live statistics with refresh functionality
+
+### Enhanced
+- **Video Streaming**: Now records detailed analytics for every video stream
+- **User Experience**: Modern, responsive analytics dashboard with professional styling
+- **Performance**: Optimized database queries with proper indexing
+- **Security**: User permission validation for analytics access
+- **Mobile Support**: Fully responsive analytics interface
+
+### Technical Improvements
+- Added VideoAnalytics admin class with comprehensive dashboard
+- Added VideoViewCounter frontend class with shortcode support
+- Enhanced VideoStreamer with automatic view recording
+- Added Chart.js integration for visual analytics
+- Implemented AJAX-powered admin interface
+- Added device and browser detection algorithms
+- Enhanced CSS with analytics-specific styling
+
 ### Fixed
 - Bug where auto-generated video slugs would disappear after saving the product
 - Improved form field handling in WooCommerce product data panels

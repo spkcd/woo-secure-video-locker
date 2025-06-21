@@ -1,0 +1,356 @@
+/* Video Analytics Dashboard Styles */
+.wsvl-analytics-dashboard {
+    max-width: 1200px;
+    margin: 20px 0;
+}
+
+/* Summary Cards */
+.wsvl-summary-cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+    gap: 20px;
+    margin-bottom: 30px;
+}
+
+.wsvl-card {
+    background: #fff;
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    padding: 20px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    text-align: center;
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.wsvl-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 8px rgba(0,0,0,0.15);
+}
+
+.wsvl-card h3 {
+    margin: 0 0 10px 0;
+    color: #333;
+    font-size: 14px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.wsvl-stat-number {
+    font-size: 32px;
+    font-weight: bold;
+    color: #0073aa;
+    margin: 0;
+}
+
+/* Charts Section */
+.wsvl-charts-section {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 30px;
+    margin-bottom: 30px;
+}
+
+.wsvl-chart-container {
+    background: #fff;
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    padding: 20px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.wsvl-chart-container h3 {
+    margin: 0 0 20px 0;
+    color: #333;
+    font-size: 16px;
+    font-weight: 600;
+}
+
+.wsvl-chart-container canvas {
+    max-height: 300px !important;
+}
+
+/* Table Section */
+.wsvl-table-section {
+    background: #fff;
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    overflow: hidden;
+}
+
+.wsvl-table-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 20px;
+    border-bottom: 1px solid #ddd;
+    background: #f9f9f9;
+}
+
+.wsvl-table-header h3 {
+    margin: 0;
+    color: #333;
+    font-size: 18px;
+    font-weight: 600;
+}
+
+.wsvl-table-actions {
+    display: flex;
+    gap: 10px;
+}
+
+.wsvl-table-section table {
+    margin: 0;
+    border: none;
+}
+
+.wsvl-table-section th,
+.wsvl-table-section td {
+    padding: 12px 15px;
+    text-align: left;
+    border-bottom: 1px solid #eee;
+}
+
+.wsvl-table-section th {
+    background: #f9f9f9;
+    font-weight: 600;
+    color: #333;
+    border-bottom: 2px solid #ddd;
+}
+
+.wsvl-table-section tbody tr:hover {
+    background: #f5f5f5;
+}
+
+.wsvl-table-section .button-small {
+    padding: 4px 8px;
+    font-size: 12px;
+    line-height: 1.4;
+}
+
+/* Modal Styles */
+.wsvl-modal {
+    position: fixed;
+    z-index: 100000;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0,0,0,0.5);
+    backdrop-filter: blur(2px);
+}
+
+.wsvl-modal-content {
+    background-color: #fff;
+    margin: 5% auto;
+    border-radius: 8px;
+    width: 90%;
+    max-width: 800px;
+    max-height: 80vh;
+    overflow-y: auto;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+    animation: modalSlideIn 0.3s ease;
+}
+
+@keyframes modalSlideIn {
+    from {
+        opacity: 0;
+        transform: translateY(-50px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.wsvl-modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 20px;
+    border-bottom: 1px solid #ddd;
+    background: #f9f9f9;
+    border-radius: 8px 8px 0 0;
+}
+
+.wsvl-modal-header h2 {
+    margin: 0;
+    color: #333;
+    font-size: 20px;
+}
+
+.wsvl-modal-close {
+    font-size: 28px;
+    font-weight: bold;
+    color: #999;
+    cursor: pointer;
+    line-height: 1;
+    transition: color 0.2s ease;
+}
+
+.wsvl-modal-close:hover {
+    color: #333;
+}
+
+.wsvl-modal-body {
+    padding: 20px;
+}
+
+/* Video Details Styles */
+.wsvl-video-details {
+    max-width: 100%;
+}
+
+.wsvl-details-section {
+    margin-bottom: 30px;
+}
+
+.wsvl-details-section:last-child {
+    margin-bottom: 0;
+}
+
+.wsvl-details-section h3 {
+    margin: 0 0 15px 0;
+    color: #333;
+    font-size: 18px;
+    font-weight: 600;
+    border-bottom: 2px solid #0073aa;
+    padding-bottom: 5px;
+}
+
+.wsvl-details-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+    gap: 15px;
+}
+
+.wsvl-detail-item {
+    padding: 10px;
+    background: #f9f9f9;
+    border-radius: 4px;
+    border-left: 3px solid #0073aa;
+}
+
+.wsvl-detail-item strong {
+    color: #333;
+    display: block;
+    margin-bottom: 5px;
+}
+
+.wsvl-details-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 10px;
+}
+
+.wsvl-details-table th,
+.wsvl-details-table td {
+    padding: 10px;
+    text-align: left;
+    border-bottom: 1px solid #ddd;
+}
+
+.wsvl-details-table th {
+    background: #f9f9f9;
+    font-weight: 600;
+    color: #333;
+}
+
+.wsvl-details-table tbody tr:hover {
+    background: #f5f5f5;
+}
+
+/* Loading and Error States */
+.wsvl-loading {
+    text-align: center;
+    padding: 40px;
+    color: #666;
+    font-style: italic;
+}
+
+.wsvl-loading:before {
+    content: "";
+    display: inline-block;
+    width: 20px;
+    height: 20px;
+    border: 2px solid #ddd;
+    border-top: 2px solid #0073aa;
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+    margin-right: 10px;
+    vertical-align: middle;
+}
+
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+.wsvl-error {
+    text-align: center;
+    padding: 40px;
+    color: #d63638;
+    background: #ffeaea;
+    border: 1px solid #f5c6cb;
+    border-radius: 4px;
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+    .wsvl-charts-section {
+        grid-template-columns: 1fr;
+    }
+    
+    .wsvl-table-header {
+        flex-direction: column;
+        gap: 15px;
+        align-items: stretch;
+    }
+    
+    .wsvl-table-actions {
+        justify-content: center;
+    }
+    
+    .wsvl-modal-content {
+        margin: 10% auto;
+        width: 95%;
+    }
+    
+    .wsvl-details-grid {
+        grid-template-columns: 1fr;
+    }
+    
+    .wsvl-table-section {
+        overflow-x: auto;
+    }
+    
+    .wsvl-table-section table {
+        min-width: 600px;
+    }
+}
+
+@media (max-width: 480px) {
+    .wsvl-summary-cards {
+        grid-template-columns: 1fr;
+    }
+    
+    .wsvl-card {
+        padding: 15px;
+    }
+    
+    .wsvl-stat-number {
+        font-size: 24px;
+    }
+    
+    .wsvl-modal-content {
+        margin: 5% auto;
+        width: 98%;
+        max-height: 90vh;
+    }
+    
+    .wsvl-modal-header,
+    .wsvl-modal-body {
+        padding: 15px;
+    }
+} 

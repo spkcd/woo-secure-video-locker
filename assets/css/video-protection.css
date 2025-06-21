@@ -203,4 +203,97 @@ video::-webkit-media-controls-panel {
     .wsvl-watermark {
         font-size: 10px !important;
     }
+}
+
+/* Video Statistics Styles */
+.wsvl-video-views,
+.wsvl-video-stats {
+    display: inline-block;
+    margin: 5px 0;
+}
+
+.wsvl-badge {
+    background: #0073aa;
+    color: white;
+    padding: 4px 8px;
+    border-radius: 12px;
+    font-size: 12px;
+    font-weight: bold;
+}
+
+.wsvl-video-stats .wsvl-stat-item {
+    display: inline-block;
+    margin-right: 15px;
+    padding: 5px 10px;
+    background: #f9f9f9;
+    border-radius: 4px;
+    font-size: 14px;
+}
+
+.wsvl-video-stats .wsvl-stat-item:last-child {
+    margin-right: 0;
+}
+
+.wsvl-product-video-stats {
+    margin: 20px 0;
+    padding: 15px;
+    background: #f9f9f9;
+    border-radius: 8px;
+    border-left: 4px solid #0073aa;
+}
+
+.wsvl-product-video-stats h4 {
+    margin: 0 0 10px 0;
+    color: #333;
+    font-size: 16px;
+}
+
+.wsvl-stats-grid {
+    display: flex;
+    gap: 15px;
+    flex-wrap: wrap;
+}
+
+.wsvl-stat-box {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 10px 15px;
+    background: white;
+    border-radius: 6px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    min-width: 80px;
+}
+
+.wsvl-stat-number {
+    font-size: 24px;
+    font-weight: bold;
+    color: #0073aa;
+    line-height: 1;
+}
+
+.wsvl-stat-label {
+    font-size: 12px;
+    color: #666;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-top: 5px;
+}
+
+.wsvl-error,
+.wsvl-no-stats {
+    color: #d63638;
+    font-style: italic;
+}
+
+/* Responsive adjustments for video stats */
+@media (max-width: 768px) {
+    .wsvl-stats-grid {
+        justify-content: center;
+    }
+    
+    .wsvl-video-stats .wsvl-stat-item {
+        display: block;
+        margin: 5px 0;
+    }
 } 

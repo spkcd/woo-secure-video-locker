@@ -13,6 +13,13 @@ class VideoStreamer {
         add_action('wp_enqueue_scripts', [$this, 'enqueue_video_player_scripts']);
         add_action('wp_ajax_wsvl_stream_video', [$this, 'ajax_stream_video']);
         add_action('wp_ajax_nopriv_wsvl_stream_video', [$this, 'ajax_stream_video']);
+        
+        // Initialize video monitoring
+        add_action('init', [$this, 'init_video_monitoring']);
+        
+        // Add AJAX endpoints for video analytics
+        add_action('wp_ajax_wsvl_get_video_stats', [$this, 'ajax_get_video_stats']);
+        add_action('wp_ajax_wsvl_get_all_video_stats', [$this, 'ajax_get_all_video_stats']);
     }
 
     public function enqueue_video_player_scripts() {
@@ -246,6 +253,13 @@ class VideoStreamer {
                 // For full file requests, use readfile which is more efficient
                 readfile($video_path);
             }
+            
+            // Record the video view
+            $this->record_video_view($video_slug, null, [
+                'bytes' => $bytes_sent ?? $file_size,
+                'duration' => 0, // Duration tracking would need client-side implementation
+                'completion' => 0.00 // Completion tracking would need client-side implementation
+            ]);
             
             if (defined('WP_DEBUG') && WP_DEBUG) {
                 error_log('WSVL Debug: Finished streaming video');
@@ -1031,5 +1045,424 @@ class VideoStreamer {
         
         error_log('VideoStreamer: No matching file found for slug: ' . $video_slug);
         return false;
+    }
+
+    /**
+     * Initialize video monitoring system
+     */
+    public function init_video_monitoring() {
+        $this->create_monitoring_tables();
+    }
+
+    /**
+     * Create database tables for video monitoring
+     */
+    private function create_monitoring_tables() {
+        global $wpdb;
+        
+        $table_name = $wpdb->prefix . 'wsvl_video_views';
+        
+        $charset_collate = $wpdb->get_charset_collate();
+        
+        $sql = "CREATE TABLE IF NOT EXISTS $table_name (
+            id bigint(20) NOT NULL AUTO_INCREMENT,
+            video_slug varchar(255) NOT NULL,
+            product_id bigint(20) NOT NULL,
+            user_id bigint(20) NOT NULL,
+            session_id varchar(255) NOT NULL,
+            ip_address varchar(45) NOT NULL,
+            user_agent text,
+            view_date datetime DEFAULT CURRENT_TIMESTAMP,
+            view_duration int(11) DEFAULT 0,
+            bytes_streamed bigint(20) DEFAULT 0,
+            completion_percentage decimal(5,2) DEFAULT 0.00,
+            device_type varchar(50) DEFAULT 'unknown',
+            browser varchar(100) DEFAULT 'unknown',
+            referrer text,
+            PRIMARY KEY (id),
+            KEY video_slug (video_slug),
+            KEY product_id (product_id),
+            KEY user_id (user_id),
+            KEY view_date (view_date),
+            KEY session_id (session_id)
+        ) $charset_collate;";
+        
+        require_once(ABSPATH . 'wp-admin/includes/upgrade.php');
+        dbDelta($sql);
+        
+        // Create summary table for faster queries
+        $summary_table = $wpdb->prefix . 'wsvl_video_stats';
+        
+        $summary_sql = "CREATE TABLE IF NOT EXISTS $summary_table (
+            id bigint(20) NOT NULL AUTO_INCREMENT,
+            video_slug varchar(255) NOT NULL,
+            product_id bigint(20) NOT NULL,
+            total_views int(11) DEFAULT 0,
+            unique_viewers int(11) DEFAULT 0,
+            total_watch_time int(11) DEFAULT 0,
+            avg_completion_rate decimal(5,2) DEFAULT 0.00,
+            last_viewed datetime,
+            created_date datetime DEFAULT CURRENT_TIMESTAMP,
+            updated_date datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            PRIMARY KEY (id),
+            UNIQUE KEY video_slug (video_slug),
+            KEY product_id (product_id),
+            KEY total_views (total_views),
+            KEY last_viewed (last_viewed)
+        ) $charset_collate;";
+        
+        dbDelta($summary_sql);
+    }
+
+    /**
+     * Record a video view
+     */
+    private function record_video_view($video_slug, $product_id = null, $additional_data = []) {
+        global $wpdb;
+        
+        try {
+            // Get user information
+            $user_id = get_current_user_id();
+            $session_id = wp_get_session_token();
+            if (empty($session_id)) {
+                $session_id = session_id() ?: uniqid('guest_', true);
+            }
+            
+            // Get client information
+            $ip_address = $this->get_client_ip();
+            $user_agent = isset($_SERVER['HTTP_USER_AGENT']) ? sanitize_text_field($_SERVER['HTTP_USER_AGENT']) : '';
+            $referrer = isset($_SERVER['HTTP_REFERER']) ? sanitize_text_field($_SERVER['HTTP_REFERER']) : '';
+            
+            // Parse user agent for device and browser info
+            $device_info = $this->parse_user_agent($user_agent);
+            
+            // Get product ID if not provided
+            if (!$product_id) {
+                $product_id = $wpdb->get_var($wpdb->prepare(
+                    "SELECT post_id FROM {$wpdb->postmeta} 
+                    WHERE meta_key = %s 
+                    AND LOWER(meta_value) = LOWER(%s)
+                    LIMIT 1",
+                    '_video_slug',
+                    $video_slug
+                ));
+            }
+            
+            // Insert view record
+            $table_name = $wpdb->prefix . 'wsvl_video_views';
+            
+            $view_data = [
+                'video_slug' => $video_slug,
+                'product_id' => $product_id ?: 0,
+                'user_id' => $user_id,
+                'session_id' => $session_id,
+                'ip_address' => $ip_address,
+                'user_agent' => $user_agent,
+                'device_type' => $device_info['device'],
+                'browser' => $device_info['browser'],
+                'referrer' => $referrer,
+                'view_date' => current_time('mysql'),
+                'view_duration' => isset($additional_data['duration']) ? intval($additional_data['duration']) : 0,
+                'bytes_streamed' => isset($additional_data['bytes']) ? intval($additional_data['bytes']) : 0,
+                'completion_percentage' => isset($additional_data['completion']) ? floatval($additional_data['completion']) : 0.00
+            ];
+            
+            $result = $wpdb->insert($table_name, $view_data);
+            
+            if ($result === false) {
+                error_log('WSVL Monitoring: Failed to insert view record: ' . $wpdb->last_error);
+                return false;
+            }
+            
+            // Update summary statistics
+            $this->update_video_stats($video_slug, $product_id);
+            
+            // Log the view for debugging
+            if (defined('WP_DEBUG') && WP_DEBUG) {
+                error_log('WSVL Monitoring: Recorded view for video ' . $video_slug . ' by user ' . $user_id);
+            }
+            
+            return true;
+            
+        } catch (\Exception $e) {
+            error_log('WSVL Monitoring Error: ' . $e->getMessage());
+            return false;
+        }
+    }
+
+    /**
+     * Update video statistics summary
+     */
+    private function update_video_stats($video_slug, $product_id = null) {
+        global $wpdb;
+        
+        $views_table = $wpdb->prefix . 'wsvl_video_views';
+        $stats_table = $wpdb->prefix . 'wsvl_video_stats';
+        
+        // Calculate statistics
+        $stats = $wpdb->get_row($wpdb->prepare("
+            SELECT 
+                COUNT(*) as total_views,
+                COUNT(DISTINCT user_id) as unique_viewers,
+                SUM(view_duration) as total_watch_time,
+                AVG(completion_percentage) as avg_completion_rate,
+                MAX(view_date) as last_viewed
+            FROM $views_table 
+            WHERE video_slug = %s
+        ", $video_slug));
+        
+        if (!$stats) {
+            return false;
+        }
+        
+        // Check if record exists
+        $existing = $wpdb->get_var($wpdb->prepare(
+            "SELECT id FROM $stats_table WHERE video_slug = %s",
+            $video_slug
+        ));
+        
+        $stats_data = [
+            'video_slug' => $video_slug,
+            'product_id' => $product_id ?: 0,
+            'total_views' => intval($stats->total_views),
+            'unique_viewers' => intval($stats->unique_viewers),
+            'total_watch_time' => intval($stats->total_watch_time),
+            'avg_completion_rate' => floatval($stats->avg_completion_rate),
+            'last_viewed' => $stats->last_viewed
+        ];
+        
+        if ($existing) {
+            // Update existing record
+            $wpdb->update($stats_table, $stats_data, ['video_slug' => $video_slug]);
+        } else {
+            // Insert new record
+            $stats_data['created_date'] = current_time('mysql');
+            $wpdb->insert($stats_table, $stats_data);
+        }
+    }
+
+    /**
+     * Get client IP address
+     */
+    private function get_client_ip() {
+        $ip_keys = ['HTTP_X_FORWARDED_FOR', 'HTTP_X_REAL_IP', 'HTTP_CLIENT_IP', 'REMOTE_ADDR'];
+        
+        foreach ($ip_keys as $key) {
+            if (!empty($_SERVER[$key])) {
+                $ip = sanitize_text_field($_SERVER[$key]);
+                // Handle comma-separated IPs (from proxies)
+                if (strpos($ip, ',') !== false) {
+                    $ip = trim(explode(',', $ip)[0]);
+                }
+                // Validate IP
+                if (filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE)) {
+                    return $ip;
+                }
+            }
+        }
+        
+        return isset($_SERVER['REMOTE_ADDR']) ? sanitize_text_field($_SERVER['REMOTE_ADDR']) : 'unknown';
+    }
+
+    /**
+     * Parse user agent for device and browser information
+     */
+    private function parse_user_agent($user_agent) {
+        $device = 'desktop';
+        $browser = 'unknown';
+        
+        if (empty($user_agent)) {
+            return ['device' => $device, 'browser' => $browser];
+        }
+        
+        // Detect mobile devices
+        if (preg_match('/Mobile|Android|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i', $user_agent)) {
+            if (preg_match('/iPad/i', $user_agent)) {
+                $device = 'tablet';
+            } else {
+                $device = 'mobile';
+            }
+        }
+        
+        // Detect browsers
+        if (preg_match('/Chrome/i', $user_agent) && !preg_match('/Edge/i', $user_agent)) {
+            $browser = 'Chrome';
+        } elseif (preg_match('/Firefox/i', $user_agent)) {
+            $browser = 'Firefox';
+        } elseif (preg_match('/Safari/i', $user_agent) && !preg_match('/Chrome/i', $user_agent)) {
+            $browser = 'Safari';
+        } elseif (preg_match('/Edge/i', $user_agent)) {
+            $browser = 'Edge';
+        } elseif (preg_match('/Opera/i', $user_agent)) {
+            $browser = 'Opera';
+        } elseif (preg_match('/MSIE|Trident/i', $user_agent)) {
+            $browser = 'Internet Explorer';
+        }
+        
+        return ['device' => $device, 'browser' => $browser];
+    }
+
+    /**
+     * Get video statistics for a specific video
+     */
+    public function get_video_stats($video_slug) {
+        global $wpdb;
+        
+        $stats_table = $wpdb->prefix . 'wsvl_video_stats';
+        $views_table = $wpdb->prefix . 'wsvl_video_views';
+        
+        // Get summary stats
+        $summary = $wpdb->get_row($wpdb->prepare(
+            "SELECT * FROM $stats_table WHERE video_slug = %s",
+            $video_slug
+        ));
+        
+        if (!$summary) {
+            return null;
+        }
+        
+        // Get additional detailed stats
+        $detailed_stats = $wpdb->get_results($wpdb->prepare("
+            SELECT 
+                DATE(view_date) as view_date,
+                COUNT(*) as daily_views,
+                COUNT(DISTINCT user_id) as daily_unique_viewers,
+                device_type,
+                browser,
+                AVG(completion_percentage) as avg_completion
+            FROM $views_table 
+            WHERE video_slug = %s 
+            AND view_date >= DATE_SUB(NOW(), INTERVAL 30 DAY)
+            GROUP BY DATE(view_date), device_type, browser
+            ORDER BY view_date DESC
+        ", $video_slug));
+        
+        // Get top viewers
+        $top_viewers = $wpdb->get_results($wpdb->prepare("
+            SELECT 
+                user_id,
+                COUNT(*) as view_count,
+                SUM(view_duration) as total_duration,
+                AVG(completion_percentage) as avg_completion,
+                MAX(view_date) as last_view
+            FROM $views_table 
+            WHERE video_slug = %s AND user_id > 0
+            GROUP BY user_id
+            ORDER BY view_count DESC
+            LIMIT 10
+        ", $video_slug));
+        
+        return [
+            'summary' => $summary,
+            'daily_stats' => $detailed_stats,
+            'top_viewers' => $top_viewers
+        ];
+    }
+
+    /**
+     * Get statistics for all videos
+     */
+    public function get_all_video_stats($limit = 50, $offset = 0) {
+        global $wpdb;
+        
+        $stats_table = $wpdb->prefix . 'wsvl_video_stats';
+        
+        $results = $wpdb->get_results($wpdb->prepare("
+            SELECT 
+                s.*,
+                p.post_title as product_name
+            FROM $stats_table s
+            LEFT JOIN {$wpdb->posts} p ON s.product_id = p.ID
+            ORDER BY s.total_views DESC, s.last_viewed DESC
+            LIMIT %d OFFSET %d
+        ", $limit, $offset));
+        
+        $total_count = $wpdb->get_var("SELECT COUNT(*) FROM $stats_table");
+        
+        return [
+            'videos' => $results,
+            'total' => intval($total_count),
+            'limit' => $limit,
+            'offset' => $offset
+        ];
+    }
+
+    /**
+     * AJAX handler to get video statistics
+     */
+    public function ajax_get_video_stats() {
+        // Verify user permissions
+        if (!current_user_can('manage_woocommerce')) {
+            wp_send_json_error('Insufficient permissions');
+            return;
+        }
+        
+        check_ajax_referer('wsvl_admin_nonce', 'nonce');
+        
+        $video_slug = isset($_POST['video_slug']) ? sanitize_text_field($_POST['video_slug']) : '';
+        
+        if (empty($video_slug)) {
+            wp_send_json_error('Video slug is required');
+            return;
+        }
+        
+        $stats = $this->get_video_stats($video_slug);
+        
+        if ($stats) {
+            wp_send_json_success($stats);
+        } else {
+            wp_send_json_error('No statistics found for this video');
+        }
+    }
+
+    /**
+     * AJAX handler to get all video statistics
+     */
+    public function ajax_get_all_video_stats() {
+        // Verify user permissions
+        if (!current_user_can('manage_woocommerce')) {
+            wp_send_json_error('Insufficient permissions');
+            return;
+        }
+        
+        check_ajax_referer('wsvl_admin_nonce', 'nonce');
+        
+        $limit = isset($_POST['limit']) ? intval($_POST['limit']) : 50;
+        $offset = isset($_POST['offset']) ? intval($_POST['offset']) : 0;
+        
+        $stats = $this->get_all_video_stats($limit, $offset);
+        wp_send_json_success($stats);
+    }
+
+    /**
+     * Get video view count for a specific video (public method)
+     */
+    public static function get_video_view_count($video_slug) {
+        global $wpdb;
+        
+        $stats_table = $wpdb->prefix . 'wsvl_video_stats';
+        
+        $count = $wpdb->get_var($wpdb->prepare(
+            "SELECT total_views FROM $stats_table WHERE video_slug = %s",
+            $video_slug
+        ));
+        
+        return intval($count);
+    }
+
+    /**
+     * Get unique viewer count for a specific video (public method)
+     */
+    public static function get_video_unique_viewers($video_slug) {
+        global $wpdb;
+        
+        $stats_table = $wpdb->prefix . 'wsvl_video_stats';
+        
+        $count = $wpdb->get_var($wpdb->prepare(
+            "SELECT unique_viewers FROM $stats_table WHERE video_slug = %s",
+            $video_slug
+        ));
+        
+        return intval($count);
     }
 } 

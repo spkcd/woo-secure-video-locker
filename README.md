@@ -5,19 +5,20 @@ Tags: video, streaming, security, woocommerce, content protection
 Requires at least: 5.8
 Tested up to: 6.4
 Requires PHP: 7.4
-Stable tag: 1.0.0
+Stable tag: 1.1.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
 A WordPress plugin that provides secure video streaming for WooCommerce products, preventing unauthorized downloads while maintaining a great user experience.
 
-![Version](https://img.shields.io/badge/version-1.0.0-blue.svg)
+![Version](https://img.shields.io/badge/version-1.1.0-blue.svg)
 ![WP tested](https://img.shields.io/badge/WordPress-5.8+-green.svg)
 ![WC tested](https://img.shields.io/badge/WooCommerce-5.0+-purple.svg)
 ![PHP](https://img.shields.io/badge/PHP-7.4+-orange.svg)
 
 ## 🔒 Features
 
+### Core Security Features
 - **Secure Video Streaming**: Delivers videos through temporary, signed URLs that expire automatically
 - **Anti-Download Protection**: Multiple layers of security to prevent video downloads:
   - Chunked video delivery
@@ -26,11 +27,24 @@ A WordPress plugin that provides secure video streaming for WooCommerce products
   - DevTools detection
   - Custom HTTP headers
   - User-specific watermarking
+- **Rate Limiting**: Prevents abuse through request limiting
+
+### 📊 NEW: Video Analytics & Monitoring (v1.1.0)
+- **Comprehensive Analytics Dashboard**: Track video performance with detailed statistics
+- **Automatic View Tracking**: Every video stream is recorded with user, device, and session data
+- **Interactive Charts**: Visual analytics with Chart.js integration
+- **Real-time Statistics**: Views, unique viewers, watch time, and completion rates
+- **Device & Browser Analytics**: Automatic detection and tracking of user devices
+- **CSV Export**: Export analytics data for external analysis
+- **Frontend Display**: Show video statistics on product pages and posts
+- **Shortcode Support**: Display video stats anywhere with simple shortcodes
+
+### Integration & Management
 - **WooCommerce Integration**: Seamlessly connects with WooCommerce products
 - **User Dashboard**: Customers can access purchased videos from their account
-- **Admin Controls**: Easy video upload and management
-- **Mobile-Friendly**: Works on all devices
-- **Rate Limiting**: Prevents abuse through request limiting
+- **Admin Controls**: Easy video upload and management with analytics
+- **Mobile-Friendly**: Works on all devices with responsive analytics
+- **Large File Support**: Chunked upload system for videos up to 2GB
 
 ## 📋 Requirements
 
@@ -59,9 +73,37 @@ A WordPress plugin that provides secure video streaming for WooCommerce products
 
 1. Create or edit a WooCommerce product
 2. Scroll down to the "Video Settings" meta box
-3. Upload a video file
+3. Upload a video file (supports files up to 2GB with chunked upload)
 4. Add a description (optional)
 5. Save the product
+
+### Video Analytics Dashboard
+
+Access comprehensive video analytics:
+
+1. Go to WooCommerce > Video Analytics
+2. View summary statistics and interactive charts
+3. Click "View Details" on any video for detailed analytics
+4. Export data as CSV for external analysis
+5. Use shortcodes to display stats on frontend
+
+### Frontend Shortcodes
+
+Display video statistics anywhere on your site:
+
+```php
+// Simple view count
+[wsvl_video_views slug="your-video-slug"]
+
+// View count with text format
+[wsvl_video_views slug="your-video-slug" format="text"]
+
+// Badge style display
+[wsvl_video_views slug="your-video-slug" format="badge"]
+
+// Comprehensive statistics
+[wsvl_video_stats slug="your-video-slug" show_views="true" show_unique="true"]
+```
 
 ### Security Settings
 
@@ -82,9 +124,11 @@ The plugin comes pre-configured with optimal security settings, but you can modi
 
 ### For Admins
 
-1. Upload videos directly to products
-2. Track video access through detailed security logs
-3. Manage all aspects of video security
+1. Upload videos directly to products (up to 2GB with chunked upload)
+2. Track video access through comprehensive analytics dashboard
+3. Monitor video performance with real-time statistics
+4. Export analytics data for reporting and analysis
+5. Manage all aspects of video security
 
 ### Technical Details
 
@@ -109,9 +153,10 @@ While this plugin implements multiple layers of protection, no system can provid
 
 For absolute security of extremely valuable content, consider additional DRM solutions or streaming services that specialize in high-security media delivery.
 
-## 📝 Changelog
+## 📝 Documentation
 
-See [CHANGELOG.md](CHANGELOG.md) for version history and changes.
+- [CHANGELOG.md](CHANGELOG.md) - Version history and changes
+- [ANALYTICS.md](ANALYTICS.md) - Complete video analytics documentation
 
 ## 📜 License
 

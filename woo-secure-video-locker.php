@@ -3,7 +3,7 @@
  * Plugin Name: Secure Video Locker for WooCommerce
  * Plugin URI: https://yourwebsite.com/secure-video-locker-for-woocommerce
  * Description: Securely deliver video content to WooCommerce customers with temporary, signed URLs and automatic refresh.
- * Version: 1.0.0
+ * Version: 1.1.0
  * Author: SPARKWEB Studio
  * Author URI: https://sparkwebstudio.com/
  * License: GPL v2 or later
@@ -21,7 +21,7 @@ if (!defined('ABSPATH')) {
 }
 
 // Define plugin constants
-define('WSVL_VERSION', '1.0.0');
+define('WSVL_VERSION', '1.1.0');
 define('WSVL_PLUGIN_DIR', plugin_dir_path(__FILE__));
 define('WSVL_PLUGIN_URL', plugin_dir_url(__FILE__));
 define('WSVL_PRIVATE_VIDEOS_DIR', trailingslashit(WP_CONTENT_DIR) . 'private-videos/');
@@ -118,8 +118,10 @@ EOT;
     // Initialize plugin components
     new \WSVL\Admin\ProductVideoManager();
     new \WSVL\Frontend\VideoDashboard();
+    new \WSVL\Frontend\VideoViewCounter();
     new \WSVL\Security\VideoStreamer();
     new \WSVL\Admin\Settings();
+    new \WSVL\Admin\VideoAnalytics();
     
     // Register scripts and styles
     add_action('wp_enqueue_scripts', 'wsvl_register_assets');
