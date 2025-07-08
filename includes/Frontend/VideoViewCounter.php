@@ -142,23 +142,39 @@ class VideoViewCounter {
             return;
         }
 
-        // Check if user has purchased this product
+        // Performance fix: Check if user has purchased this product using optimized query with caching
         $user_id = get_current_user_id();
-        $has_access = false;
-
-        $orders = wc_get_orders([
-            'customer_id' => $user_id,
-            'status' => ['completed', 'processing'],
-            'limit' => -1,
-        ]);
-
-        foreach ($orders as $order) {
-            foreach ($order->get_items() as $item) {
-                if ($item->get_product_id() == $product->get_id()) {
-                    $has_access = true;
-                    break 2;
-                }
-            }
+        $product_id = $product->get_id();
+        
+        // Use transient caching to avoid repeated expensive queries
+        $cache_key = 'wsvl_user_access_' . $user_id . '_' . $product_id;
+        $has_access = get_transient($cache_key);
+        
+        if ($has_access === false) {
+            // Optimized direct database query instead of loading all order objects
+            global $wpdb;
+            
+            $has_access = $wpdb->get_var($wpdb->prepare(
+                "SELECT 1 FROM {$wpdb->prefix}woocommerce_order_items oi
+                INNER JOIN {$wpdb->prefix}woocommerce_order_itemmeta oim ON oi.order_item_id = oim.order_item_id
+                INNER JOIN {$wpdb->posts} p ON oi.order_id = p.ID
+                INNER JOIN {$wpdb->postmeta} pm ON p.ID = pm.post_id
+                WHERE oi.order_item_type = 'line_item'
+                AND oim.meta_key = '_product_id'
+                AND oim.meta_value = %d
+                AND p.post_type = 'shop_order'
+                AND p.post_status IN ('wc-completed', 'wc-processing')
+                AND pm.meta_key = '_customer_user'
+                AND pm.meta_value = %d
+                LIMIT 1",
+                $product_id,
+                $user_id
+            ));
+            
+            $has_access = !empty($has_access);
+            
+            // Cache the result for 1 hour to improve performance
+            set_transient($cache_key, $has_access, HOUR_IN_SECONDS);
         }
 
         if (!$has_access) {

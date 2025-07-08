@@ -406,12 +406,18 @@ class VideoStreamer {
                 error_log('VideoStreamer: Provided _sid: ' . $_REQUEST['_sid']);
             }
 
-            // Find the product with this video slug (case-insensitive)
+            // Security fix: Use exact matching instead of case-insensitive to prevent bypass
+            // Validate slug format to prevent injection attacks
+            if (!preg_match('/^[a-zA-Z0-9_-]+$/', $video_slug)) {
+                error_log('VideoStreamer: Invalid video slug format: ' . $video_slug);
+                return false;
+            }
+            
             global $wpdb;
             $product_id = $wpdb->get_var($wpdb->prepare(
                 "SELECT post_id FROM {$wpdb->postmeta} 
                 WHERE meta_key = %s 
-                AND LOWER(meta_value) = LOWER(%s)
+                AND meta_value = %s
                 AND post_id IN (
                     SELECT ID FROM {$wpdb->posts} 
                     WHERE post_type = %s 
@@ -435,21 +441,10 @@ class VideoStreamer {
             error_log('VideoStreamer: Video file from meta: ' . ($video_file ? $video_file : 'None'));
 
             if (empty($video_file)) {
-                // Try to find the video file by looking for files with a matching slug
-                error_log('VideoStreamer: Attempting to find video file by slug pattern matching');
-                $video_path = $this->find_video_by_slug_pattern($video_slug);
-                if ($video_path) {
-                    $filename = basename($video_path);
-                    error_log('VideoStreamer: Found video file by pattern matching: ' . $filename);
-                    
-                    // Update the product meta with the found filename
-                    update_post_meta($product_id, '_video_file', $filename);
-                    $video_file = $filename;
-                    error_log('VideoStreamer: Updated product meta with found filename: ' . $filename);
-                } else {
-                    error_log('VideoStreamer: No video file found for product: ' . $product_id);
-                    return false;
-                }
+                // Security fix: Remove vulnerable pattern matching fallback
+                // Only allow access to explicitly configured videos
+                error_log('VideoStreamer: No video file configured for product: ' . $product_id);
+                return false;
             }
 
             // Try both original case and lowercase versions of the file
@@ -460,22 +455,15 @@ class VideoStreamer {
             error_log('- Original: ' . $video_path);
             error_log('- Lowercase: ' . $video_path_lower);
             
-            // Check both paths
+            // Security fix: Remove alternative pattern matching fallback
+            // Only allow access to files that exist at the expected paths
             if (!file_exists($video_path) && !file_exists($video_path_lower)) {
                 error_log('VideoStreamer: Video file not found at either path');
                 error_log('VideoStreamer: Directory exists: ' . (is_dir(dirname($video_path)) ? 'Yes' : 'No'));
                 if (is_dir(dirname($video_path))) {
                     error_log('VideoStreamer: Directory contents: ' . print_r(scandir(dirname($video_path)), true));
                 }
-                
-                // Try to find the file by slug pattern matching
-                $alternative_path = $this->find_video_by_slug_pattern($video_slug);
-                if ($alternative_path) {
-                    error_log('VideoStreamer: Found alternative video path: ' . $alternative_path);
-                    $final_path = $alternative_path;
-                } else {
-                    return false;
-                }
+                return false;
             } else {
                 // Use the path that exists
                 $final_path = file_exists($video_path) ? $video_path : $video_path_lower;
@@ -504,48 +492,80 @@ class VideoStreamer {
     private function verify_user_has_access($user_id, $video_slug) {
         error_log('VideoStreamer: Checking access for user ' . $user_id . ' to video ' . $video_slug);
         
-        // Verify user has purchased the video
-        $has_access = false;
-        $orders = wc_get_orders([
-            'customer_id' => $user_id,
-            'status' => ['completed', 'processing'],
-            'limit' => -1,
-        ]);
-
-        error_log('VideoStreamer: Found ' . count($orders) . ' orders for user');
-
-        foreach ($orders as $order) {
-            foreach ($order->get_items() as $item) {
-                $product_id = $item->get_product_id();
-                $product_video_slug = get_post_meta($product_id, '_video_slug', true);
-                error_log('VideoStreamer: Checking product ' . $product_id . ' with video slug: ' . $product_video_slug);
-                if (strtolower($product_video_slug) === strtolower($video_slug)) {
-                    $has_access = true;
-                    error_log('VideoStreamer: Found matching product with access');
-                    break 2;
-                }
-            }
+        // Performance fix: Use optimized query with caching
+        $cache_key = 'wsvl_video_access_' . $user_id . '_' . md5($video_slug);
+        $has_access = get_transient($cache_key);
+        
+        if ($has_access === false) {
+            // Optimized direct database query instead of loading all order objects
+            global $wpdb;
+            
+            $has_access = $wpdb->get_var($wpdb->prepare(
+                "SELECT 1 FROM {$wpdb->prefix}woocommerce_order_items oi
+                INNER JOIN {$wpdb->prefix}woocommerce_order_itemmeta oim ON oi.order_item_id = oim.order_item_id
+                INNER JOIN {$wpdb->posts} p ON oi.order_id = p.ID
+                INNER JOIN {$wpdb->postmeta} pm ON p.ID = pm.post_id
+                INNER JOIN {$wpdb->postmeta} pm2 ON oim.meta_value = pm2.post_id
+                WHERE oi.order_item_type = 'line_item'
+                AND oim.meta_key = '_product_id'
+                AND p.post_type = 'shop_order'
+                AND p.post_status IN ('wc-completed', 'wc-processing')
+                AND pm.meta_key = '_customer_user'
+                AND pm.meta_value = %d
+                AND pm2.meta_key = '_video_slug'
+                AND pm2.meta_value = %s
+                LIMIT 1",
+                $user_id,
+                $video_slug
+            ));
+            
+            $has_access = !empty($has_access);
+            
+            // Cache the result for 30 minutes to improve performance
+            set_transient($cache_key, $has_access, 30 * MINUTE_IN_SECONDS);
         }
+        
+        error_log('VideoStreamer: Access check result: ' . ($has_access ? 'Granted' : 'Denied'));
         
         // Check for subscription access if WooCommerce Subscriptions is active
         if (!$has_access && function_exists('wcs_get_users_subscriptions')) {
             error_log('VideoStreamer: Checking subscriptions');
-            $subscriptions = wcs_get_users_subscriptions($user_id);
-            foreach ($subscriptions as $subscription) {
-                if (!$subscription->has_status(['active', 'pending-cancel'])) {
-                    continue;
-                }
+            
+            // Performance fix: Use optimized query for subscription access check
+            $subscription_cache_key = 'wsvl_subscription_access_' . $user_id . '_' . md5($video_slug);
+            $subscription_access = get_transient($subscription_cache_key);
+            
+            if ($subscription_access === false) {
+                global $wpdb;
                 
-                foreach ($subscription->get_items() as $item) {
-                    $product_id = $item->get_product_id();
-                    $product_video_slug = get_post_meta($product_id, '_video_slug', true);
-                    error_log('VideoStreamer: Checking subscription product ' . $product_id . ' with video slug: ' . $product_video_slug);
-                    if (strtolower($product_video_slug) === strtolower($video_slug)) {
-                        $has_access = true;
-                        error_log('VideoStreamer: Found matching subscription with access');
-                        break 2;
-                    }
-                }
+                $subscription_access = $wpdb->get_var($wpdb->prepare(
+                    "SELECT 1 FROM {$wpdb->prefix}woocommerce_order_items oi
+                    INNER JOIN {$wpdb->prefix}woocommerce_order_itemmeta oim ON oi.order_item_id = oim.order_item_id
+                    INNER JOIN {$wpdb->posts} p ON oi.order_id = p.ID
+                    INNER JOIN {$wpdb->postmeta} pm ON p.ID = pm.post_id
+                    INNER JOIN {$wpdb->postmeta} pm2 ON oim.meta_value = pm2.post_id
+                    WHERE oi.order_item_type = 'line_item'
+                    AND oim.meta_key = '_product_id'
+                    AND p.post_type = 'shop_subscription'
+                    AND p.post_status IN ('wc-active', 'wc-pending-cancel')
+                    AND pm.meta_key = '_customer_user'
+                    AND pm.meta_value = %d
+                    AND pm2.meta_key = '_video_slug'
+                    AND pm2.meta_value = %s
+                    LIMIT 1",
+                    $user_id,
+                    $video_slug
+                ));
+                
+                $subscription_access = !empty($subscription_access);
+                
+                // Cache subscription access for 15 minutes
+                set_transient($subscription_cache_key, $subscription_access, 15 * MINUTE_IN_SECONDS);
+            }
+            
+            if ($subscription_access) {
+                $has_access = true;
+                error_log('VideoStreamer: Found matching subscription with access');
             }
         }
         

@@ -52,10 +52,26 @@ spl_autoload_register(function ($class) {
     }
 
     $relative_class = substr($class, $len);
-    $file = $base_dir . str_replace('\\', '/', $relative_class) . '.php';
-
-    if (file_exists($file)) {
-        require $file;
+    
+    // Security fix: Prevent directory traversal attacks
+    // Remove any dangerous characters and sequences
+    $relative_class = str_replace(['..', '\\..', '/..', '\\\\', '//'], '', $relative_class);
+    $relative_class = preg_replace('/[^a-zA-Z0-9_\\\\/]/', '', $relative_class);
+    
+    // Convert namespace separators to directory separators
+    $relative_path = str_replace('\\', '/', $relative_class);
+    
+    // Build the full file path
+    $file = $base_dir . $relative_path . '.php';
+    
+    // Security check: Ensure the resolved path is within the plugin directory
+    $real_base_dir = realpath($base_dir);
+    $real_file_path = realpath($file);
+    
+    if ($real_file_path && $real_base_dir && strpos($real_file_path, $real_base_dir) === 0) {
+        if (file_exists($file)) {
+            require $file;
+        }
     }
 });
 
